@@ -62,3 +62,18 @@ export interface PaymentMethod {
   isActive: boolean;
   qrCodeUrl?: string;
 }
+
+export interface SystemSettings {
+  models: {
+    fast: string;
+    core: string;
+    pro: string;
+    image: string;
+    live: string;
+    tts: string;
+  };
+  limits: {
+    free: number;
+    pro: number;
+  };
+}

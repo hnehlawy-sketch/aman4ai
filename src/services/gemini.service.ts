@@ -3,6 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import { Observable } from 'rxjs';
 import { UserProfile } from '../models';
 import { DataLoggingService } from './data-logging.service';
+import { AuthService } from './auth.service';
 
 const PROXY_URL = 'https://important-pike-20.amanapp.deno.net';
 
@@ -26,6 +27,7 @@ export interface ChatMessage {
 export class GeminiService {
   private liveSession: any;
   private logger = inject(DataLoggingService);
+  private authService = inject(AuthService);
 
   constructor() {}
 
@@ -37,10 +39,11 @@ export class GeminiService {
     history: ChatMessage[],
     options?: { modelKey?: string; userProfile?: UserProfile | null; webSearch?: boolean; generateImage?: boolean; location?: { lat: number, lng: number } }
   ): Promise<number> {
-    let modelName = 'gemini-2.5-flash-lite-preview-09-2025';
-    if (options?.modelKey === 'pro') modelName = 'gemini-2.5-pro';
-    if (options?.modelKey === 'core') modelName = 'gemini-2.5-flash-lite-preview-09-2025';
-    if (options?.generateImage) modelName = 'gemini-2.5-flash-image';
+    const settings = this.authService.systemSettings();
+    let modelName = settings?.models.fast || 'gemini-2.5-flash-lite-preview-09-2025';
+    if (options?.modelKey === 'pro') modelName = settings?.models.pro || 'gemini-2.5-pro';
+    if (options?.modelKey === 'core') modelName = settings?.models.core || 'gemini-2.5-flash';
+    if (options?.generateImage) modelName = settings?.models.image || 'gemini-2.5-flash-image';
 
     const contents = history
       .filter(msg => msg.role !== 'system' && !msg.isError)
@@ -100,13 +103,16 @@ export class GeminiService {
       // Log user message
       const lastUserMsg = history.filter(m => m.role === 'user').pop();
       if (lastUserMsg) {
-        this.logger.logChat(uid, email, 'user', lastUserMsg.text, 0, { model: options?.modelKey });
+        this.countTokens(history, options).then(tokens => {
+          this.logger.logChat(uid, email, 'user', lastUserMsg.text, tokens, { model: options?.modelKey });
+        });
       }
 
-      let modelName = 'gemini-3-flash-preview';
-      if (options?.modelKey === 'pro') modelName = 'gemini-3.1-pro-preview';
-      if (options?.modelKey === 'core') modelName = 'gemini-3-flash-preview';
-      if (options?.generateImage) modelName = 'gemini-2.5-flash-image';
+      const settings = this.authService.systemSettings();
+      let modelName = settings?.models.fast || 'gemini-2.5-flash-lite-preview-09-2025';
+      if (options?.modelKey === 'pro') modelName = settings?.models.pro || 'gemini-2.5-pro';
+      if (options?.modelKey === 'core') modelName = settings?.models.core || 'gemini-2.5-flash';
+      if (options?.generateImage) modelName = settings?.models.image || 'gemini-2.5-flash-image';
 
       const contents = history
         .filter(msg => msg.role !== 'system' && !msg.isError)
@@ -327,7 +333,9 @@ export class GeminiService {
             text = text.trim();
 
             if (text) {
-              this.logger.logChat(uid, email, 'model', text, 0, { model: options?.modelKey });
+              this.countTokens([...history, { role: 'model', text: text, id: 'temp' }], options).then(tokens => {
+                this.logger.logChat(uid, email, 'model', text, tokens, { model: options?.modelKey });
+              });
             }
             subscriber.next({ textChunk: text, images: images.length > 0 ? images : undefined, finalText: text });
             subscriber.complete();
@@ -351,7 +359,9 @@ export class GeminiService {
                 });
               }
               if (fullText) {
-                this.logger.logChat(uid, email, 'model', fullText, 0, { model: options?.modelKey });
+                this.countTokens([...history, { role: 'model', text: fullText, id: 'temp' }], options).then(tokens => {
+                  this.logger.logChat(uid, email, 'model', fullText, tokens, { model: options?.modelKey });
+                });
               }
               subscriber.next({ finalText: fullText });
               subscriber.complete();
@@ -433,7 +443,9 @@ export class GeminiService {
   }
 
   async synthesizeSpeech(text: string, voice: string = 'Charon'): Promise<{ url: string; mimeType: string }> {
-    const targetUrl = `${PROXY_URL}/v1beta/models/gemini-2.5-flash-preview-tts:generateContent`;
+    const settings = this.authService.systemSettings();
+    const modelName = settings?.models.tts || 'gemini-2.5-flash-preview-tts';
+    const targetUrl = `${PROXY_URL}/v1beta/models/${modelName}:generateContent`;
 
     const requestBody = {
       contents: [{ parts: [{ text: text }] }],
@@ -480,6 +492,9 @@ export class GeminiService {
   }): Promise<void> {
     const apiKey = (window as any).GEMINI_API_KEY || 'proxy-key';
     
+    const settings = this.authService.systemSettings();
+    const modelName = settings?.models.live || 'gemini-2.5-flash-native-audio-preview-09-2025';
+
     const liveSdk = new GoogleGenAI({ 
       apiKey: apiKey,
       httpOptions: { baseUrl: PROXY_URL }
@@ -508,10 +523,12 @@ export class GeminiService {
     }
 
     sys += `\n\nلديك القدرة على تنفيذ المهام التالية باستخدام الأدوات المتاحة:
-    1. توليد الصور: استخدم أداة 'generateImage' إذا طلب المستخدم رسم أو توليد صورة.
-    2. البحث عن مواقع: استخدم أداة 'searchLocation' لعرض خريطة لمكان معين.
+    1. توليد الصور: استخدم أداة 'generateImage' إذا طلب المستخدم رسم أو توليد صورة. سأقوم بعرض الصورة له مباشرة.
+    2. البحث عن مواقع: استخدم أداة 'searchLocation' لعرض خريطة لمكان معين. سأعرض له الخريطة فوراً.
     3. معرفة موقع المستخدم: استخدم أداة 'getUserLocation' لمعرفة أين يتواجد المستخدم حالياً.
-    4. البحث في الويب: استخدم أداة 'googleSearch' للبحث عن معلومات حديثة.`;
+    4. البحث في الويب: استخدم أداة 'googleSearch' للبحث عن معلومات حديثة أو أخبار.
+    
+    ملاحظة هامة: عند استخدام أي أداة، لا تخبر المستخدم أنك ستقوم بذلك، بل قم باستدعاء الأداة مباشرة وتحدث معه بشكل طبيعي عما تفعله.`;
 
     const tools: any[] = [
       {
@@ -549,7 +566,7 @@ export class GeminiService {
     ];
 
     this.liveSession = await liveSdk.live.connect({
-      model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+      model: modelName,
       callbacks: {
         onopen: options.onopen,
         onmessage: options.onmessage,
@@ -562,7 +579,9 @@ export class GeminiService {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: options.voiceName || "Puck" } },
         },
         systemInstruction: { parts: [{ text: sys }] },
-        tools: tools
+        tools: tools,
+        inputAudioTranscription: {},
+        outputAudioTranscription: {}
       }
     });
   }

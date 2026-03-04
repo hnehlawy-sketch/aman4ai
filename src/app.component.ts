@@ -7,7 +7,7 @@ import { GeminiService, ChatMessage } from './services/gemini.service';
 import { AuthService } from './services/auth.service';
 import { UiService } from './services/ui.service';
 import { MessageBubbleComponent } from './components/message-bubble.component';
-import { doc, setDoc, collection, writeBatch, getDocs } from 'firebase/firestore';
+import { doc, setDoc, collection, writeBatch, getDocs, deleteDoc } from 'firebase/firestore';
 import { translations } from './translations';
 import { ChatSession, UserProfile } from './models';
 
@@ -161,6 +161,10 @@ export class AppComponent implements OnInit {
       const id = this.currentSessionId();
       if (id && msgs.length >= 0) {
         this.updateSessionMessages(id, msgs);
+        // Auto-sync to Firestore if user is logged in
+        if (this.authService.user()) {
+          this.syncChatToFirestore();
+        }
       }
     });
 
@@ -446,12 +450,25 @@ export class AppComponent implements OnInit {
     }));
   }
 
-  deleteSession(event: Event, id: string) {
+  async deleteSession(event: Event, id: string) {
     event.stopPropagation();
     this.activeMenuId.set(null);
     if(confirm(this.t().deleteConfirm)) {
       this.sessions.update(prev => prev.filter(s => s.id !== id));
       this.storageService.deleteSession(id); // Delete from IndexedDB
+      
+      // Delete from Firestore if user is logged in
+      const user = this.authService.user();
+      if (user) {
+        try {
+          const chatDocRef = doc(this.authService.db, 'users', user.uid, 'chats', id);
+          await deleteDoc(chatDocRef);
+          console.log(`[AppComponent] Deleted remote session: ${id}`);
+        } catch (e) {
+          console.error(`[AppComponent] Failed to delete remote session: ${id}`, e);
+        }
+      }
+
       if (this.currentSessionId() === id) {
         if (this.sessions().length > 0) {
           this.loadSession(this.sessions()[0].id, false);
@@ -508,6 +525,26 @@ export class AppComponent implements OnInit {
     if (confirm(this.t().deleteSelectedConfirm)) {
       this.sessions.update(prev => prev.filter(s => !idsToDelete.includes(s.id)));
       
+      // Delete from Firestore if user is logged in
+      const user = this.authService.user();
+      if (user) {
+        const batch = writeBatch(this.authService.db);
+        idsToDelete.forEach(id => {
+          const chatDocRef = doc(this.authService.db, 'users', user.uid, 'chats', id);
+          batch.delete(chatDocRef);
+        });
+        try {
+          await batch.commit();
+          console.log(`[AppComponent] Deleted ${idsToDelete.length} remote sessions`);
+        } catch (e) {
+          console.error('[AppComponent] Failed to delete remote sessions batch', e);
+        }
+      }
+
+      for (const id of idsToDelete) {
+        this.storageService.deleteSession(id);
+      }
+      
       if (idsToDelete.includes(this.currentSessionId())) {
         if (this.sessions().length > 0) {
           this.loadSession(this.sessions()[0].id, false);
@@ -561,6 +598,22 @@ export class AppComponent implements OnInit {
     };
 
     recognition.start();
+  }
+
+  openLiveView() {
+    // Ensure we have an active session before opening live view
+    const currentId = this.currentSessionId();
+    const sessions = this.sessions();
+    if (!sessions.some(s => s.id === currentId)) {
+      const newSession: ChatSession = {
+        id: currentId,
+        title: this.currentLang() === 'ar' ? 'محادثة مباشرة' : 'Live Chat',
+        messages: [],
+        timestamp: Date.now()
+      };
+      this.sessions.update(prev => [newSession, ...prev]);
+    }
+    this.uiService.openLiveView(); 
   }
 
   toggleSidebar() {

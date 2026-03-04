@@ -101,6 +101,16 @@ import { translations } from '../translations';
                     class="px-4 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap flex-shrink-0">
               التقارير
             </button>
+            <button (click)="activeTab.set('settings')" 
+                    [class.bg-blue-500]="activeTab() === 'settings'"
+                    [class.text-white]="activeTab() === 'settings'"
+                    [class.bg-gray-100]="activeTab() !== 'settings'"
+                    [class.dark:bg-slate-800]="activeTab() !== 'settings'"
+                    [class.text-slate-600]="activeTab() !== 'settings'"
+                    [class.dark:text-slate-400]="activeTab() !== 'settings'"
+                    class="px-4 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap flex-shrink-0">
+              الإعدادات
+            </button>
          </div>
 
          <div class="flex-1 overflow-y-auto pr-1 sm:pr-2 -mr-1 sm:-mr-2">
@@ -517,16 +527,129 @@ import { translations } from '../translations';
 
                 <!-- Reports Tab Content -->
                 @if (activeTab() === 'reports') {
-                  <div class="space-y-6">
-                    <h3 class="font-bold text-lg">تقارير استهلاك التوكنات</h3>
-                    <div class="grid grid-cols-2 gap-4">
-                      @for (type of (tokenReport() | keyvalue); track type.key) {
-                        <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border dark:border-slate-700">
-                          <p class="text-xs opacity-50 uppercase font-bold">{{ type.key }}</p>
-                          <p class="text-2xl font-bold">{{ type.value | number }}</p>
-                        </div>
-                      }
+                  <div class="space-y-6 animate-[fadeIn_0.3s_ease-out]">
+                    <div class="flex items-center justify-between">
+                      <h3 class="font-bold text-lg">تقارير استهلاك التوكنات</h3>
+                      <div class="text-[10px] opacity-50 font-mono">آخر تحديث: {{ lastUpdate | date:'shortTime' }}</div>
                     </div>
+
+                    @if ((tokenReport() | keyvalue).length === 0) {
+                      <div class="p-12 text-center border-2 border-dashed dark:border-slate-800 rounded-[32px] opacity-50">
+                        <div class="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-8 h-8 text-slate-400">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                          </svg>
+                        </div>
+                        <p class="font-bold">لا توجد بيانات تقارير حالياً</p>
+                        <p class="text-xs mt-1">يتم جمع البيانات من سجلات الاستخدام الأخيرة (آخر 100 عملية)</p>
+                      </div>
+                    } @else {
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        @for (type of (tokenReport() | keyvalue); track type.key) {
+                          <div class="p-6 rounded-[32px] bg-white dark:bg-slate-900 border dark:border-slate-800 shadow-sm hover:shadow-md transition-all">
+                            <div class="flex items-center gap-3 mb-4">
+                              <div class="w-10 h-10 rounded-2xl flex items-center justify-center"
+                                   [class.bg-blue-500/10]="type.key === 'chat'"
+                                   [class.text-blue-500]="type.key === 'chat'"
+                                   [class.bg-green-500/10]="type.key === 'image'"
+                                   [class.text-green-500]="type.key === 'image'"
+                                   [class.bg-purple-500/10]="type.key === 'token_usage'"
+                                   [class.text-purple-500]="type.key === 'token_usage'">
+                                <svg *ngIf="type.key === 'chat'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3h9m-9 3h9m-6.75-12h10.5A2.25 2.25 0 0 1 20.25 4.5v10.5A2.25 2.25 0 0 1 18 17.25h-6.375L7.5 21V17.25H4.5A2.25 2.25 0 0 1 2.25 15V4.5A2.25 2.25 0 0 1 4.5 2.25h3Z" />
+                                </svg>
+                                <svg *ngIf="type.key === 'image'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                                </svg>
+                                <svg *ngIf="type.key !== 'chat' && type.key !== 'image'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                                </svg>
+                              </div>
+                              <span class="text-xs font-bold uppercase tracking-wider opacity-60">{{ type.key }}</span>
+                            </div>
+                            <div class="flex items-baseline gap-2">
+                              <span class="text-3xl font-bold">{{ type.value | number }}</span>
+                              <span class="text-[10px] font-bold opacity-30 uppercase">Tokens</span>
+                            </div>
+                          </div>
+                        }
+                      </div>
+
+                      <div class="p-6 rounded-[32px] bg-blue-500/5 border border-blue-500/10">
+                        <h4 class="font-bold text-sm mb-4 flex items-center gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-blue-500">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                          </svg>
+                          ملخص السجلات
+                        </h4>
+                        <div class="grid grid-cols-2 gap-6">
+                          <div class="space-y-1">
+                            <p class="text-[10px] font-bold opacity-40 uppercase tracking-widest">إجمالي السجلات المحملة</p>
+                            <p class="text-xl font-bold">{{ logs().length }}</p>
+                          </div>
+                          <div class="space-y-1">
+                            <p class="text-[10px] font-bold opacity-40 uppercase tracking-widest">آخر عملية</p>
+                            <p class="text-sm font-bold truncate">{{ logs()[0]?.email || 'N/A' }}</p>
+                            <p class="text-[10px] opacity-40">{{ logs()[0]?.timestamp?.toDate() | date:'short' }}</p>
+                          </div>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+
+                <!-- Settings Tab Content -->
+                @if (activeTab() === 'settings') {
+                  <div class="space-y-6 animate-[fadeIn_0.3s_ease-out]">
+                    <h3 class="font-bold text-lg">إعدادات النظام</h3>
+                    
+                    <div class="p-6 rounded-[32px] bg-white dark:bg-slate-900 border dark:border-slate-800 shadow-sm">
+                      <h4 class="font-bold text-sm mb-4">نماذج الذكاء الاصطناعي</h4>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="space-y-1.5">
+                          <label class="text-[10px] font-bold opacity-40 uppercase tracking-widest">Fast Model (العادي)</label>
+                          <input type="text" [(ngModel)]="editableSettings.models.fast" class="w-full text-sm bg-gray-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-transparent focus:border-blue-500/50 outline-none transition-all">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="text-[10px] font-bold opacity-40 uppercase tracking-widest">Core Model (الكور)</label>
+                          <input type="text" [(ngModel)]="editableSettings.models.core" class="w-full text-sm bg-gray-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-transparent focus:border-blue-500/50 outline-none transition-all">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="text-[10px] font-bold opacity-40 uppercase tracking-widest">Pro Model (البرو)</label>
+                          <input type="text" [(ngModel)]="editableSettings.models.pro" class="w-full text-sm bg-gray-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-transparent focus:border-blue-500/50 outline-none transition-all">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="text-[10px] font-bold opacity-40 uppercase tracking-widest">Image Model (الصور)</label>
+                          <input type="text" [(ngModel)]="editableSettings.models.image" class="w-full text-sm bg-gray-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-transparent focus:border-blue-500/50 outline-none transition-all">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="text-[10px] font-bold opacity-40 uppercase tracking-widest">Live Model (الصوت المباشر)</label>
+                          <input type="text" [(ngModel)]="editableSettings.models.live" class="w-full text-sm bg-gray-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-transparent focus:border-blue-500/50 outline-none transition-all">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="text-[10px] font-bold opacity-40 uppercase tracking-widest">TTS Model (تحويل النص لصوت)</label>
+                          <input type="text" [(ngModel)]="editableSettings.models.tts" class="w-full text-sm bg-gray-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-transparent focus:border-blue-500/50 outline-none transition-all">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="p-6 rounded-[32px] bg-white dark:bg-slate-900 border dark:border-slate-800 shadow-sm">
+                      <h4 class="font-bold text-sm mb-4">حدود التوكنات الافتراضية</h4>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="space-y-1.5">
+                          <label class="text-[10px] font-bold opacity-40 uppercase tracking-widest">الخطة العادية (Free)</label>
+                          <input type="number" [(ngModel)]="editableSettings.limits.free" class="w-full text-sm bg-gray-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-transparent focus:border-blue-500/50 outline-none transition-all">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="text-[10px] font-bold opacity-40 uppercase tracking-widest">خطة برو (Pro)</label>
+                          <input type="number" [(ngModel)]="editableSettings.limits.pro" class="w-full text-sm bg-gray-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-transparent focus:border-blue-500/50 outline-none transition-all">
+                        </div>
+                      </div>
+                    </div>
+
+                    <button (click)="saveSettings()" [disabled]="isSavingSettings()" class="w-full py-4 rounded-[24px] bg-blue-500 text-white font-bold shadow-lg shadow-blue-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50">
+                      {{ isSavingSettings() ? 'جاري الحفظ...' : 'حفظ الإعدادات' }}
+                    </button>
                   </div>
                 }
              }
@@ -546,7 +669,7 @@ export class AdminPanelComponent implements OnInit {
   t = input<any>(translations.ar);
   theme = input<'light' | 'dark'>('light');
 
-  activeTab = signal<'dashboard' | 'users' | 'requests' | 'methods' | 'logs' | 'reports'>('dashboard');
+  activeTab = signal<'dashboard' | 'users' | 'requests' | 'methods' | 'logs' | 'reports' | 'settings'>('dashboard');
   requests = signal<PaymentRequest[]>([]);
   users = signal<any[]>([]);
   methods = signal<PaymentMethod[]>([]);
@@ -556,6 +679,12 @@ export class AdminPanelComponent implements OnInit {
   userSearch = signal('');
   filterPremium = signal<boolean | null>(null);
   lastUpdate = new Date();
+
+  editableSettings: any = {
+    models: { fast: '', core: '', pro: '', image: '', live: '', tts: '' },
+    limits: { free: 60000, pro: 200000 }
+  };
+  isSavingSettings = signal(false);
 
   // Aggregated Report Data
   tokenReport = computed(() => {
@@ -692,6 +821,10 @@ export class AdminPanelComponent implements OnInit {
         .then(l => this.logs.set(l))
         .catch(e => console.error('[AdminPanel] Logs load failed:', e));
 
+      // Load System Settings
+      const settings = await this.authService.loadSystemSettings();
+      this.editableSettings = JSON.parse(JSON.stringify(settings));
+
     } catch (e: any) {
       console.error('[AdminPanel] General error:', e);
       if (e.code === 'permission-denied') {
@@ -788,6 +921,19 @@ export class AdminPanelComponent implements OnInit {
       this.methods.update(prev => prev.filter(m => m.id !== id));
     } catch (e) {
       console.error('Failed to delete method', e);
+    }
+  }
+
+  async saveSettings() {
+    this.isSavingSettings.set(true);
+    try {
+      await this.authService.updateSystemSettings(this.editableSettings);
+      alert('تم حفظ الإعدادات بنجاح');
+    } catch (e) {
+      console.error('Failed to save settings', e);
+      alert('فشل حفظ الإعدادات');
+    } finally {
+      this.isSavingSettings.set(false);
     }
   }
 }

@@ -1,5 +1,5 @@
 import { Injectable, signal, inject } from '@angular/core';
-import { UserProfile, PaymentRequest } from '../models';
+import { UserProfile, PaymentRequest, SystemSettings } from '../models';
 import { StorageService } from './storage.service';
 
 // Use a simpler, more standard import for Firebase compat.
@@ -45,6 +45,7 @@ export class AuthService {
   isLoading = signal<boolean>(true);
   dailyUsage = signal<number>(0);
   dailyLimit = signal<number>(60000);
+  systemSettings = signal<SystemSettings | null>(null);
   
   private storageService = inject(StorageService);
 
@@ -301,8 +302,9 @@ export class AuthService {
         const data = docSnap.data();
         const plan = data?.['plan'] || 'free';
         const customLimit = data?.['customDailyLimit'];
-        // Pro limit is 200,000. Free is 60,000.
-        const limit = customLimit || (plan === 'pro' ? 200000 : 60000);
+        const settings = this.systemSettings();
+        const defaultLimit = plan === 'pro' ? (settings?.limits.pro || 200000) : (settings?.limits.free || 60000);
+        const limit = customLimit || defaultLimit;
         this.dailyLimit.set(limit);
         
         const today = new Date().toDateString();
@@ -317,6 +319,9 @@ export class AuthService {
       // Load Profile
       const profile = await this.loadUserProfile(uid);
       this.userProfile.set(profile);
+
+      // Load System Settings
+      await this.loadSystemSettings();
 
     } catch (e) {
       console.error('[AuthService] Error in syncUserToDB:', e);
@@ -389,8 +394,10 @@ export class AuthService {
         currentUsage = 0; // Reset for new day
       }
 
-      // Free: 60k, Pro: 200k, or custom limit
-      const DAILY_LIMIT = data['customDailyLimit'] || (plan === 'pro' ? 200000 : 60000);
+      // Use system settings for limits
+      const settings = this.systemSettings();
+      const defaultLimit = plan === 'pro' ? (settings?.limits.pro || 200000) : (settings?.limits.free || 60000);
+      const DAILY_LIMIT = data['customDailyLimit'] || defaultLimit;
 
       if (currentUsage + estimatedTokens > DAILY_LIMIT) {
         return false; // Limit exceeded
@@ -488,6 +495,49 @@ export class AuthService {
     if (user) {
       await this.syncUserToDB(user);
     }
+  }
+
+  async loadSystemSettings(): Promise<SystemSettings> {
+    try {
+      const settingsRef = doc(this.db, 'settings', 'system');
+      const snap = await getDoc(settingsRef);
+      if (snap.exists()) {
+        const settings = snap.data() as SystemSettings;
+        this.systemSettings.set(settings);
+        return settings;
+      } else {
+        // Default settings
+        const defaults: SystemSettings = {
+          models: {
+            fast: 'gemini-2.5-flash-lite-preview-09-2025',
+            core: 'gemini-2.5-flash',
+            pro: 'gemini-2.5-pro',
+            image: 'gemini-2.5-flash-image',
+            live: 'gemini-2.5-flash-native-audio-preview-09-2025',
+            tts: 'gemini-2.5-flash-preview-tts'
+          },
+          limits: {
+            free: 60000,
+            pro: 200000
+          }
+        };
+        // Only admins can create these, but we can set the signal locally
+        this.systemSettings.set(defaults);
+        return defaults;
+      }
+    } catch (e) {
+      console.warn('Failed to load system settings', e);
+      return this.systemSettings() || {
+        models: { fast: '', core: '', pro: '', image: '', live: '', tts: '' },
+        limits: { free: 60000, pro: 200000 }
+      };
+    }
+  }
+
+  async updateSystemSettings(settings: SystemSettings) {
+    const settingsRef = doc(this.db, 'settings', 'system');
+    await setDoc(settingsRef, settings);
+    this.systemSettings.set(settings);
   }
 
   async getAllUsers(): Promise<any[]> {

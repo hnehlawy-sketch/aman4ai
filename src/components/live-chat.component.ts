@@ -6,13 +6,14 @@ import { AuthService } from '../services/auth.service';
 import { UiService } from '../services/ui.service';
 import { DataLoggingService } from '../services/data-logging.service';
 import { translations } from '../translations';
+import { SafePipe } from '../pipes/safe.pipe';
 
 declare var window: any;
 
 @Component({
   selector: 'app-live-chat',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, SafePipe],
   template: `
     <div class="fixed inset-0 z-[100] bg-[#0a0a0a] text-white overflow-hidden flex flex-col font-sans">
       
@@ -68,6 +69,38 @@ declare var window: any;
 
         <!-- Transcript -->
         <div class="w-full max-w-2xl text-center space-y-4 min-h-[120px] flex flex-col justify-end">
+          
+          <!-- Visual Content Display -->
+          @if (visualContent(); as content) {
+            <div class="mb-6 animate-scaleIn">
+              @if (content.type === 'image') {
+                <div class="relative group">
+                  <img [src]="content.data" class="max-h-[300px] rounded-2xl shadow-2xl border-2 border-white/20 mx-auto object-contain bg-black/40">
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center p-4 rounded-2xl">
+                    <span class="text-xs text-white/80">تم التوليد بواسطة أمان</span>
+                  </div>
+                </div>
+              } @else if (content.type === 'map') {
+                <div class="w-full h-[250px] rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl relative">
+                   <iframe 
+                    width="100%" 
+                    height="100%" 
+                    frameborder="0" 
+                    style="border:0"
+                    [src]="'https://www.google.com/maps/embed/v1/view?key=YOUR_API_KEY&center=' + content.data.lat + ',' + content.data.lng + '&zoom=14' | safe:'resource'"
+                    allowfullscreen>
+                  </iframe>
+                  <!-- Fallback if iframe fails or key missing, using a simple static map or just a label -->
+                  <div class="absolute inset-0 bg-blue-900/20 pointer-events-none"></div>
+                  <div class="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs border border-white/10">
+                    {{ content.data.label || 'موقع جغرافي' }}
+                  </div>
+                </div>
+              }
+              <button (click)="visualContent.set(null)" class="mt-3 text-xs text-white/40 hover:text-white/60 transition-colors underline">إخفاء</button>
+            </div>
+          }
+
           <p class="text-2xl sm:text-4xl font-light leading-tight tracking-tight text-white/90 transition-all duration-300"
              [class.opacity-50]="liveState() === 'speaking'">
             {{ liveFinalTranscript() }}
@@ -147,6 +180,8 @@ export class LiveChatComponent implements OnDestroy {
   liveFinalTranscript = signal('');
   liveError = signal('');
   showVoiceSelector = signal(false);
+  
+  visualContent = signal<{ type: 'image' | 'map', data: any } | null>(null);
   
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -345,21 +380,37 @@ export class LiveChatComponent implements OnDestroy {
   }
 
   handleLiveMessage(msg: any) {
-    // Handle transcriptions
+    // Handle transcriptions from Model
     if (msg.serverContent?.modelTurn?.parts) {
       // If we have pending user text, commit it now as the model is starting to respond
       if (this.currentUserText.trim()) {
+        this.liveFinalTranscript.set(this.currentUserText.trim());
         this.addMessageToHistory('user', this.currentUserText.trim());
         this.currentUserText = '';
+        this.liveInterimTranscript.set('');
       }
 
       for (const part of msg.serverContent.modelTurn.parts) {
         if (part.text) {
-          this.liveInterimTranscript.update(t => t + part.text);
+          // This is the transcription of what the model is saying
+          this.liveInterimTranscript.set(part.text);
           this.currentModelText += part.text;
         }
         if (part.inlineData?.data) {
           this.playAudioChunk(part.inlineData.data);
+        }
+      }
+    }
+
+    // Handle transcriptions from User (Input Audio Transcription)
+    if (msg.serverContent?.userTurn?.parts) {
+      for (const part of msg.serverContent.userTurn.parts) {
+        if (part.text) {
+          // If it's a user turn, we show it as interim until it's "final"
+          // In this SDK, we might not get a clear "final" flag, so we treat it as interim
+          // and then commit it when the model starts responding or after a timeout.
+          this.liveInterimTranscript.set(part.text);
+          this.currentUserText = part.text;
         }
       }
     }
@@ -372,21 +423,12 @@ export class LiveChatComponent implements OnDestroy {
       }
     }
 
-    // Handle user transcription
-    if (msg.serverContent?.userTurn?.parts) {
-      for (const part of msg.serverContent.userTurn.parts) {
-        if (part.text) {
-          this.liveFinalTranscript.set(part.text);
-          this.currentUserText = part.text;
-        }
-      }
-    }
-
     // Handle turn completion (Model finished)
     if (msg.serverContent?.turnComplete) {
        if (this.currentModelText.trim()) {
          this.addMessageToHistory('model', this.currentModelText.trim());
          this.currentModelText = '';
+         this.liveInterimTranscript.set('');
        }
     }
 
@@ -400,7 +442,7 @@ export class LiveChatComponent implements OnDestroy {
     }
   }
 
-  private handleLiveToolCall(call: any) {
+  private async handleLiveToolCall(call: any) {
     const { name, args, id } = call;
     
     // Log the intent in the background chat
@@ -412,17 +454,55 @@ export class LiveChatComponent implements OnDestroy {
       intentText = `[طلب توليد صورة: ${args.prompt}]`;
       toastMessage = 'جاري تحضير الصورة...';
       isCustomTool = true;
+      
+      // Execute image generation in background
+      this.geminiService.sendMessage([{ id: crypto.randomUUID(), role: 'user', text: args.prompt }], this.authService.userPlan(), undefined, {
+        generateImage: true,
+        modelKey: 'fast',
+        uid: this.authService.user()?.uid,
+        email: this.authService.user()?.email || ''
+      }).subscribe({
+        next: (res) => {
+          if (res.images && res.images.length > 0) {
+            this.visualContent.set({ type: 'image', data: res.images[0].url });
+            this.addMessageToHistory('model', `[تم توليد الصورة: ${args.prompt}]`);
+          }
+        }
+      });
+
     } else if (name === 'getUserLocation') {
       intentText = `[طلب معرفة الموقع الحالي]`;
       toastMessage = 'جاري تحديد الموقع...';
       isCustomTool = true;
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          this.visualContent.set({ type: 'map', data: { lat, lng, label: 'موقعك الحالي' } });
+          this.addMessageToHistory('model', `[تم تحديد الموقع: ${lat}, ${lng}]`);
+        });
+      }
+
     } else if (name === 'searchLocation') {
       intentText = `[طلب البحث عن موقع: ${args.query}]`;
       toastMessage = `جاري البحث عن ${args.query}...`;
       isCustomTool = true;
+
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(args.query)}`);
+        const data = await response.json();
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lng = parseFloat(data[0].lon);
+          const label = data[0].display_name.split(',')[0];
+          this.visualContent.set({ type: 'map', data: { lat, lng, label } });
+          this.addMessageToHistory('model', `[تم العثور على الموقع: ${label}]`);
+        }
+      } catch (e) {}
+
     } else if (name === 'googleSearch') {
       intentText = `[طلب بحث في الويب]`;
-      // googleSearch is built-in
     }
 
     if (intentText) {
@@ -435,14 +515,6 @@ export class LiveChatComponent implements OnDestroy {
       if (toastMessage) {
         this.uiService.showToast(toastMessage, 'info');
       }
-    }
-
-    // If it's a major action that needs visual space, close live chat and trigger it
-    if (name === 'generateImage' || name === 'getUserLocation' || name === 'searchLocation') {
-      setTimeout(() => {
-        this.closeLiveView();
-        this.uiService.triggerMainChatAction({ name, args });
-      }, 2000);
     }
   }
 
