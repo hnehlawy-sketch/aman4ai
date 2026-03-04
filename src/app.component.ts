@@ -128,7 +128,7 @@ export class AppComponent implements OnInit {
   
   // -- Usage Stats --
   usagePercentage = computed(() => {
-    if (this.authService.isPremium()) return 0;
+    if (this.authService.userPlan() === 'premium') return 0;
     const usage = this.authService.dailyUsage();
     const limit = this.authService.dailyLimit();
     return Math.min(100, Math.round((usage / limit) * 100));
@@ -178,7 +178,7 @@ export class AppComponent implements OnInit {
     if (savedTheme) this.theme.set(savedTheme);
 
     effect(() => {
-      if (this.authService.isPremium()) {
+      if (this.authService.userPlan() === 'premium') {
         this.isLimitExceeded.set(false);
       }
     });
@@ -206,6 +206,7 @@ export class AppComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.setupSecurity();
     this.loadSessions();
     const sessions = this.sessions();
     
@@ -216,6 +217,59 @@ export class AppComponent implements OnInit {
       // Start a fresh new chat (won't be persisted until first message)
       this.createNewChat(false);
     }
+  }
+
+  private setupSecurity() {
+    // 1. Block common developer tools keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      // F12
+      if (e.key === 'F12') {
+        e.preventDefault();
+        return false;
+      }
+      // Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C, Ctrl+U
+      if (e.ctrlKey && (e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C') || e.key === 'u' || e.key === 'U')) {
+        e.preventDefault();
+        return false;
+      }
+      // Mac equivalents (Cmd+Opt+I, etc.)
+      if (e.metaKey && e.altKey && (e.key === 'i' || e.key === 'j' || e.key === 'c')) {
+        e.preventDefault();
+        return false;
+      }
+      return true;
+    });
+
+    // 2. Deterrent: Disable right-click context menu
+    // Note: This prevents the "Inspect" option, but users can still use Ctrl+C to copy text.
+    window.addEventListener('contextmenu', (e) => {
+      // We only prevent it if the user isn't holding a specific key or if we want to be strict
+      // To allow copying, we could check if there's a selection, but usually blocking the menu is the goal.
+      e.preventDefault();
+      return false;
+    });
+
+    // 3. Deterrent: Debugger trap (optional, can be annoying for devs)
+    /*
+    setInterval(() => {
+      (function() {
+        (function a() {
+          try {
+            (function b(i) {
+              if (("" + i / i).length !== 1 || i % 20 === 0) {
+                (function() {}).constructor("debugger")();
+              } else {
+                debugger;
+              }
+              b(++i);
+            })(0);
+          } catch (e) {
+            setTimeout(a, 5000);
+          }
+        })();
+      })();
+    }, 5000);
+    */
   }
 
   async installPwa() {

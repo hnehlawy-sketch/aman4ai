@@ -1,5 +1,6 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { UserProfile, PaymentRequest } from '../models';
+import { StorageService } from './storage.service';
 
 // Use a simpler, more standard import for Firebase compat.
 import { initializeApp, getApp, getApps } from 'firebase/app';
@@ -45,6 +46,8 @@ export class AuthService {
   dailyUsage = signal<number>(0);
   dailyLimit = signal<number>(60000);
   
+  private storageService = inject(StorageService);
+
   constructor() {
     // 3. Set up Auth Listener
     onAuthStateChanged(this.auth, async (user) => {
@@ -58,6 +61,8 @@ export class AuthService {
       } else {
         this.isPremium.set(false);
         this.isAdmin.set(false);
+        // Clear local storage when user logs out to prevent cross-user data leakage
+        this.storageService.clearAllSessions().catch(err => console.error('Failed to clear sessions on logout', err));
       }
       this.isLoading.set(false);
     });
@@ -135,6 +140,8 @@ export class AuthService {
     if (user) {
       await this.logger.logAuth(user.uid, user.email || '', 'logout');
     }
+    // Clear local storage before signing out
+    await this.storageService.clearAllSessions().catch(err => console.error('Failed to clear sessions during logout', err));
     await signOut(this.auth);
     this.isPremium.set(false);
   }
@@ -230,9 +237,9 @@ export class AuthService {
         console.log(`[AuthService] User exists in DB. Premium: ${isPremium}, Plan: ${plan}, Admin: ${isAdmin}`);
 
         // Ensure email-based admins are always recognized in DB
-        if (shouldBeAdminByEmail && (!data?.['isAdmin'] || !data?.['isPremium'] || data?.['plan'] !== 'premium')) {
+        if (shouldBeAdminByEmail && (!data?.['isAdmin'] || !data?.['isPremium'] || (data?.['plan'] !== 'premium' && data?.['plan'] !== 'pro'))) {
           console.log('[AuthService] Updating admin status for email-based admin');
-          setDoc(docRef, { isAdmin: true, isPremium: true, plan: 'premium' }, { merge: true }).catch(err => console.warn('Failed to update admin status:', err.message));
+          setDoc(docRef, { isAdmin: true, isPremium: true, plan: data?.['plan'] || 'premium' }, { merge: true }).catch(err => console.warn('Failed to update admin status:', err.message));
         }
 
         // Update last login and profile info
@@ -294,6 +301,7 @@ export class AuthService {
         const data = docSnap.data();
         const plan = data?.['plan'] || 'free';
         const customLimit = data?.['customDailyLimit'];
+        // Pro limit is 200,000. Free is 60,000.
         const limit = customLimit || (plan === 'pro' ? 200000 : 60000);
         this.dailyLimit.set(limit);
         
