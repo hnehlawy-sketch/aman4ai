@@ -1,16 +1,21 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { GoogleGenAI } from '@google/genai';
+import { Observable } from 'rxjs';
 import { UserProfile } from '../models';
+import { DataLoggingService } from './data-logging.service';
 
-// ============================================================
-// ⚠️ رابط الـ Worker (الخادم الوكيل)
-// ============================================================
-const WORKER_URL = 'https://aman-ai.h-nehlawy.workers.dev'; 
+const PROXY_URL = 'https://important-pike-20.amanapp.deno.net';
 
 export interface ChatMessage {
+  id: string; // Made mandatory for easier tracking
   role: 'user' | 'model' | 'system';
   text: string;
   isError?: boolean;
-  fileData?: { mimeType: string, data: string, name: string };
+  isEdited?: boolean;
+  location?: { lat: number, lng: number, label?: string };
+  functionCall?: any;
+  functionResponse?: any;
+  fileData?: { mimeType: string, data?: string, name: string, url?: string };
   generatedImages?: { url: string, mimeType: string, alt?: string }[]; 
   generatedFile?: { content: string; type: 'pdf' | 'docx' | 'txt'; filename: string };
 }
@@ -19,175 +24,573 @@ export interface ChatMessage {
   providedIn: 'root'
 })
 export class GeminiService {
-  
+  private liveSession: any;
+  private logger = inject(DataLoggingService);
+
   constructor() {}
 
   startNewChat(lang: 'ar' | 'en' = 'ar') {
     // Reset connection state if needed
   }
 
-  /**
-   * Sends chat history to the Custom Worker, which now handles all complex logic.
-   */
-  async sendMessage(
+  async countTokens(
     history: ChatMessage[],
-    isPremium: boolean,
-    signal?: AbortSignal,
-    options?: { modelKey?: string; userProfile?: UserProfile | null }
-  ): Promise<{ text: string, images?: { url: string, mimeType: string, alt?: string }[], generatedFile?: ChatMessage['generatedFile'] }> { 
-    
-    // 1. Prepare Request Body
+    options?: { modelKey?: string; userProfile?: UserProfile | null; webSearch?: boolean; generateImage?: boolean; location?: { lat: number, lng: number } }
+  ): Promise<number> {
+    let modelName = 'gemini-2.5-flash-lite-preview-09-2025';
+    if (options?.modelKey === 'pro') modelName = 'gemini-2.5-pro';
+    if (options?.modelKey === 'core') modelName = 'gemini-2.5-flash-lite-preview-09-2025';
+    if (options?.generateImage) modelName = 'gemini-2.5-flash-image';
+
     const contents = history
       .filter(msg => msg.role !== 'system' && !msg.isError)
       .map(msg => {
         const parts: any[] = [];
         if (msg.text) parts.push({ text: msg.text });
-        
         if (msg.fileData && msg.fileData.data) {
           parts.push({
             inlineData: {
               mimeType: msg.fileData.mimeType,
-              data: msg.fileData.data
+              data: this.stripDataUrlPrefix(msg.fileData.data)
             }
           });
         }
-        
         return {
           role: msg.role === 'user' ? 'user' : 'model',
           parts: parts
         };
       });
 
-    const requestBody = {
-      action: 'chat',
-      contents: contents,
-      modelKey: options?.modelKey || 'fast',
-      userProfile: options?.userProfile || null
-    };
+    const requestBody: any = { contents };
+    const targetUrl = `${PROXY_URL}/v1beta/models/${modelName}:countTokens`;
 
     try {
-      const response = await fetch(WORKER_URL, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-        signal: signal
+        body: JSON.stringify(requestBody)
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ 
-          error: `Request failed with status ${response.status}` 
-        }));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
       
-      if (data.error) {
-        throw new Error(data.error);
+      if (!response.ok) return 0;
+      const data = await response.json();
+      return data.totalTokens || 0;
+    } catch (e) {
+      console.warn('Token counting failed', e);
+      return 0;
+    }
+  }
+
+  sendMessage(
+    history: ChatMessage[],
+    userPlan: 'free' | 'pro' | 'premium',
+    signal?: AbortSignal,
+    options?: { modelKey?: string; userProfile?: UserProfile | null; webSearch?: boolean; generateImage?: boolean; toolResponse?: { name: string, response: any }; uid?: string; email?: string; location?: { lat: number, lng: number } }
+  ): Observable<{ textChunk?: string; finalText?: string; error?: string; images?: any[]; functionCall?: any }> {
+    return new Observable(subscriber => {
+      const controller = new AbortController();
+      const fetchSignal = controller.signal;
+
+      if (signal) {
+        signal.addEventListener('abort', () => controller.abort());
       }
 
-      // The worker now returns the exact format we need.
-      return {
-        text: data.text || '',
-        images: data.images || [],
-        generatedFile: data.generatedFile || undefined
+      const uid = options?.uid || 'anonymous';
+      const email = options?.email || 'anonymous';
+
+      // Log user message
+      const lastUserMsg = history.filter(m => m.role === 'user').pop();
+      if (lastUserMsg) {
+        this.logger.logChat(uid, email, 'user', lastUserMsg.text, 0, { model: options?.modelKey });
+      }
+
+      let modelName = 'gemini-3-flash-preview';
+      if (options?.modelKey === 'pro') modelName = 'gemini-3.1-pro-preview';
+      if (options?.modelKey === 'core') modelName = 'gemini-3-flash-preview';
+      if (options?.generateImage) modelName = 'gemini-2.5-flash-image';
+
+      const contents = history
+        .filter(msg => msg.role !== 'system' && !msg.isError)
+        .map(msg => {
+          const parts: any[] = [];
+          if (msg.text) parts.push({ text: msg.text });
+          if (msg.functionCall) parts.push({ functionCall: msg.functionCall });
+          if (msg.functionResponse) parts.push({ functionResponse: msg.functionResponse });
+          if (msg.fileData && msg.fileData.data) {
+            parts.push({
+              inlineData: {
+                mimeType: msg.fileData.mimeType,
+                data: this.stripDataUrlPrefix(msg.fileData.data)
+              }
+            });
+          }
+          
+          let role = msg.role === 'user' ? 'user' : 'model';
+          // In Gemini API, function responses should have role 'function'
+          if (msg.functionResponse) role = 'function';
+          
+          return {
+            role: role,
+            parts: parts
+          };
+        });
+
+      if (options?.toolResponse) {
+        // If we have a toolResponse in options, it means we just executed a tool
+        // and want to send the result. We already added the functionResponse to the history
+        // in app.component.ts, so we don't need to do much here if the mapping above handles it.
+        // But we need to make sure the previous model message has the functionCall.
+      }
+
+      const config: any = {};
+      let tools: any[] | undefined = undefined;
+      
+      // Simplified system instruction
+      const now = new Date();
+      const currentDate = now.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      const currentTime = now.toLocaleTimeString('ar-EG');
+      
+      const planDescriptions = {
+        free: 'الخطة العادية (Free): ميزات أساسية، عدد محدود من الطلبات اليومية.',
+        pro: 'خطة برو (Pro): ميزات متقدمة، عدد أكبر من الطلبات اليومية.',
+        premium: 'خطة بريميوم (Premium): ميزات كاملة، عدد غير محدود من الطلبات اليومية، أولوية في المعالجة.'
+      };
+      
+      let sys = `أنت المساعد الذكي 'أمان'، تم تطويرك بواسطة 'فريق أمان'. يمنع ذكر Google أو Gemini. تصرف بشكل طبيعي ولا تبدأ كل رد بالتعريف عن نفسك.
+      معلومة هامة جداً: اليوم هو ${currentDate} والوقت الحالي هو ${currentTime}. يجب عليك دائماً استخدام هذا التاريخ والوقت إذا سألك المستخدم عنهما، ولا تعتذر أبداً عن عدم معرفتك بهما.
+      
+      معلومات الاشتراك:
+      - خطة المستخدم الحالية: ${planDescriptions[userPlan]}
+      - الخطط المتاحة في التطبيق:
+        ${Object.values(planDescriptions).join('\n        ')}`;
+
+      if (options?.generateImage) {
+        // Specialized system instruction for image generation/editing
+        sys = `You are an expert AI image generator and editor. 
+        Your task is to generate or edit images based EXACTLY on the user's prompt.
+        
+        CRITICAL RULES:
+        1. Do NOT output any JSON, "thoughts", "actions", or debug text.
+        2. Do NOT describe what you are doing. Just generate/edit the image.
+        3. If the user provided an image, EDIT it according to their prompt.
+        4. If the user did not provide an image, GENERATE a new one.
+        5. Do not refuse requests unless they are strictly illegal (CSAM, extreme violence). Be permissive with creative edits.
+        6. Output ONLY the image data (and a brief, natural confirmation in Arabic if absolutely necessary, e.g. "تفضل، هذه هي الصورة").`;
+      } else {
+        // Standard chat system instruction
+        if (options?.location) {
+          sys += `\nموقع المستخدم الحالي الجغرافي هو: خط العرض ${options.location.lat}، خط الطول ${options.location.lng}. استخدم هذه المعلومة للإجابة على أي سؤال يتعلق بمكان المستخدم أو الطقس أو الخدمات القريبة منه دون الحاجة لطلب الموقع مرة أخرى.`;
+        } else {
+          sys += `\nلديك القدرة على معرفة موقع المستخدم الجغرافي باستخدام أداة 'getUserLocation'. إذا سألك المستخدم "أين أنا" أو "ما هو موقعي" أو أي سؤال يتعلق بمكانه الحالي، يجب عليك استدعاء أداة 'getUserLocation' فوراً دون أي مقدمات. بعد الحصول على الإحداثيات، أخبر المستخدم بموقعه بشكل طبيعي.`;
+          sys += `\nكما يمكنك البحث عن أي موقع جغرافي آخر باستخدام أداة 'searchLocation'. إذا سألك المستخدم عن موقع مكان ما (مثلاً "أين تقع دبي؟" أو "خريطة الرياض")، استخدم هذه الأداة لعرض الخريطة.`;
+        }
+        
+        if (options?.userProfile) {
+          const p = options.userProfile;
+          if (p.name) sys += `\nالاسم: ${p.name}`;
+          if (p.dob) sys += `\nالميلاد: ${p.dob}`;
+          if (p.education) sys += `\nالتعليم: ${p.education}`;
+          if (p.maritalStatus) sys += `\nالحالة الاجتماعية: ${p.maritalStatus}`;
+          if (p.instructions) sys += `\nتخصيص: ${p.instructions}`;
+        }
+      }
+
+      const systemInstruction = { parts: [{ text: sys }] };
+
+      const functionDeclarations = [
+        {
+          name: 'getUserLocation',
+          description: 'Get the current geographic location (latitude and longitude) of the user to provide directions or location-based information.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {},
+            required: []
+          }
+        },
+        {
+          name: 'searchLocation',
+          description: 'Search for a specific location (city, place, address) to show it on the map.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              query: {
+                type: 'STRING',
+                description: 'The location to search for (e.g. "Dubai", "Eiffel Tower")'
+              }
+            },
+            required: ['query']
+          }
+        }
+      ];
+
+      tools = [];
+      if (options?.generateImage) {
+        tools = undefined;
+      } else if (options?.webSearch) {
+        // If web search is enabled, we prioritize it and cannot use function calling (API limitation)
+        tools = [{ googleSearch: {} }];
+      } else {
+        // If web search is disabled, we provide the function declarations
+        tools = [{ functionDeclarations }];
+      }
+
+      const requestBody: any = {
+        contents: contents,
+        generationConfig: config,
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' }
+        ]
       };
 
-    } catch (error: any) {
-      console.error('Gemini Service Error:', error);
-      if (error.name === 'AbortError') throw new Error('تم إيقاف التوليد.');
-      if (error.message.includes('Failed to fetch')) {
-          throw new Error('فشل الاتصال بالخادم. تأكد من الإنترنت.');
+      // Sanitize history for Image Generation models (they don't support function calls)
+      if (options?.generateImage) {
+        requestBody.contents = contents.map((msg: any) => {
+          // Filter out functionCall and functionResponse parts
+          const newParts = msg.parts.filter((p: any) => !p.functionCall && !p.functionResponse);
+          // If no parts left (e.g. it was purely a function message), we might need to skip the message or replace with dummy text
+          if (newParts.length === 0) {
+            return null; 
+          }
+          return { ...msg, parts: newParts };
+        }).filter((msg: any) => msg !== null);
       }
-      throw error;
+
+      if (systemInstruction) {
+        requestBody.systemInstruction = systemInstruction;
+      }
+      if (tools) {
+        requestBody.tools = tools;
+        console.log('Sending tools to Gemini:', JSON.stringify(tools));
+      }
+
+      // Determine endpoint based on streaming or image generation
+      const endpoint = options?.generateImage 
+        ? `/v1beta/models/${modelName}:generateContent`
+        : `/v1beta/models/${modelName}:streamGenerateContent?alt=sse`;
+
+      const targetUrl = `${PROXY_URL}${endpoint}`;
+
+      fetch(targetUrl, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        signal: fetchSignal
+      }).then(response => {
+        if (!response.ok) {
+          return response.json().then(err => { throw new Error(err.error?.message || `HTTP error! status: ${response.status}`) });
+        }
+        if (!response.body) {
+          throw new Error('No response body');
+        }
+
+        if (options?.generateImage) {
+          // Non-streaming response for images
+          response.json().then(data => {
+            const images: any[] = [];
+            let text = '';
+            if (data.candidates?.[0]?.content?.parts) {
+              for (const part of data.candidates[0].content.parts) {
+                if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+                  const imgUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                  images.push({
+                    url: imgUrl,
+                    mimeType: part.inlineData.mimeType
+                  });
+                  this.logger.logImage(uid, email, lastUserMsg?.text || 'Image generation', imgUrl);
+                } else if (part.text) {
+                  text += part.text;
+                }
+              }
+            }
+            
+            // Aggressive cleaning for image generation responses
+            // Remove JSON-like artifacts, "action:", "thought:", etc.
+            if (images.length > 0) {
+              // If we have images, we can be very aggressive and remove almost all text
+              // unless it's a simple confirmation.
+              if (text.includes('action":') || text.includes('"thought":') || text.includes('```json')) {
+                text = ''; // Discard garbage text completely if image exists
+              }
+            } else {
+              // If no image, we might need the text to explain why, but still clean it
+              text = text.replace(/action":\s*"[^"]+"/g, '')
+                         .replace(/"action_input":\s*"{[^"]+}"/g, '')
+                         .replace(/"thought":\s*"[^"]+"/g, '')
+                         .replace(/```json[^`]*```/g, '')
+                         .replace(/{[\s\S]*"action"[\s\S]*}/g, '');
+            }
+            
+            text = text.trim();
+
+            if (text) {
+              this.logger.logChat(uid, email, 'model', text, 0, { model: options?.modelKey });
+            }
+            subscriber.next({ textChunk: text, images: images.length > 0 ? images : undefined, finalText: text });
+            subscriber.complete();
+          }).catch(err => subscriber.error(err));
+          return;
+        }
+
+        // Streaming response
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullText = '';
+
+        const push = () => {
+          reader.read().then(({ done, value }) => {
+            if (done) {
+              if (buffer.trim()) {
+                this.processLines(buffer, (textChunk, images, functionCall) => {
+                  fullText += textChunk;
+                  subscriber.next({ textChunk, images, functionCall });
+                });
+              }
+              if (fullText) {
+                this.logger.logChat(uid, email, 'model', fullText, 0, { model: options?.modelKey });
+              }
+              subscriber.next({ finalText: fullText });
+              subscriber.complete();
+              return;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            this.processLines(lines.join('\n'), (textChunk, images, functionCall) => {
+              fullText += textChunk;
+              subscriber.next({ textChunk, images, functionCall });
+            });
+            
+            push();
+          }).catch(err => {
+            if (err.name === 'AbortError') {
+              subscriber.complete();
+            } else {
+              subscriber.error(err);
+            }
+          });
+        }
+        push();
+
+      }).catch(err => {
+        subscriber.error(err);
+      });
+
+      return () => {
+        controller.abort();
+      };
+    });
+  }
+
+  private processLines(buffer: string, callback: (text: string, images?: any[], functionCall?: any) => void) {
+    const lines = buffer.split('\n');
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+
+      if (trimmedLine.startsWith('data:')) {
+        const data = trimmedLine.startsWith('data: ') ? trimmedLine.substring(6) : trimmedLine.substring(5);
+        if (data === '[DONE]') continue;
+
+        try {
+          const json = JSON.parse(data);
+          if (json.error) {
+            throw new Error(json.error.message || 'Unknown error');
+          }
+          const textChunk = this.extractText(json);
+          const functionCall = json.candidates?.[0]?.content?.parts?.find((p: any) => p.functionCall)?.functionCall;
+          const images: any[] = [];
+          if (json.candidates?.[0]?.content?.parts) {
+            for (const part of json.candidates[0].content.parts) {
+              if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+                images.push({
+                  url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
+                  mimeType: part.inlineData.mimeType
+                });
+              }
+            }
+          }
+          if (textChunk || images.length > 0 || functionCall) {
+            callback(textChunk, images.length > 0 ? images : undefined, functionCall);
+          }
+        } catch (e) {}
+      }
     }
   }
 
-  /**
-   * Text-to-Speech via worker. Returns an audio URL (WAV) for playback.
-   */
+  private extractText(json: any): string {
+    if (!json) return '';
+    if (json.candidates?.[0]?.content?.parts?.[0]?.text) {
+      return json.candidates[0].content.parts[0].text;
+    }
+    return '';
+  }
+
   async synthesizeSpeech(text: string, voice: string = 'Charon'): Promise<{ url: string; mimeType: string }> {
-    const payload = {
-      action: 'tts',
-      text,
-      voice,
-      modelKey: 'tts'
+    const targetUrl = `${PROXY_URL}/v1beta/models/gemini-2.5-flash-preview-tts:generateContent`;
+
+    const requestBody = {
+      contents: [{ parts: [{ text: text }] }],
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voice }
+          }
+        }
+      }
     };
 
-    const response = await fetch(WORKER_URL, {
+    const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      headers: { 
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
     });
 
-    const raw = await response.text();
     if (!response.ok) {
-      let errMsg = `Error ${response.status}`;
-      try {
-        const errJson = raw ? JSON.parse(raw) : null;
-        if (errJson?.error) errMsg = errJson.error;
-      } catch {}
-      throw new Error(errMsg);
+      const errJson = await response.json().catch(() => ({}));
+      throw new Error(errJson.error?.message || `Error ${response.status}`);
     }
 
-    if (!raw) throw new Error('Empty TTS response');
+    const data = await response.json();
+    const base64Audio = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    
+    if (!base64Audio) throw new Error('No audio data returned');
 
-    let data: any;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      throw new Error('Invalid TTS response');
-    }
-
-    if (data?.error) throw new Error(data.error);
-
-    const audioUrl = data?.audioUrl || data?.url;
-    if (audioUrl && typeof audioUrl === 'string') {
-      return { url: audioUrl, mimeType: data?.mimeType || 'audio/wav' };
-    }
-
-    const audioData = data?.audio?.data;
-    const mimeType = data?.audio?.mimeType || 'audio/pcm;rate=24000';
-
-    if (!audioData || typeof audioData !== 'string') {
-      throw new Error('No audio data returned');
-    }
-
-    const cleanBase64 = this.stripDataUrlPrefix(audioData);
-    if (this.isPcmMime(mimeType)) {
-      const wavBlob = this.pcmBase64ToWavBlob(cleanBase64, this.extractSampleRate(mimeType) || 24000, 1);
-      const url = URL.createObjectURL(wavBlob);
-      return { url, mimeType: 'audio/wav' };
-    }
-
-    const blob = this.base64ToBlob(cleanBase64, mimeType);
-    const url = URL.createObjectURL(blob);
-    return { url, mimeType };
+    const wavBlob = this.pcmBase64ToWavBlob(base64Audio, 24000, 1);
+    return { url: URL.createObjectURL(wavBlob), mimeType: 'audio/wav' };
   }
 
-  async getLiveToken(): Promise<{ token: string, fallback?: boolean }> {
-    try {
-      const response = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'live_token' })
+  async startLiveSession(options: { 
+    onopen?: () => void, 
+    onmessage?: (msg: any) => void, 
+    onclose?: () => void, 
+    onerror?: (err: any) => void,
+    voiceName?: string,
+    userProfile?: UserProfile | null,
+    userPlan: 'free' | 'pro' | 'premium'
+  }): Promise<void> {
+    const apiKey = (window as any).GEMINI_API_KEY || 'proxy-key';
+    
+    const liveSdk = new GoogleGenAI({ 
+      apiKey: apiKey,
+      httpOptions: { baseUrl: PROXY_URL }
+    });
+
+    const planDescriptions = {
+      free: 'الخطة العادية (Free): ميزات أساسية، عدد محدود من الطلبات اليومية.',
+      pro: 'خطة برو (Pro): ميزات متقدمة، عدد أكبر من الطلبات اليومية.',
+      premium: 'خطة بريميوم (Premium): ميزات كاملة، عدد غير محدود من الطلبات اليومية، أولوية في المعالجة.'
+    };
+
+    let sys = `تعليمات صارمة جداً: أنت 'أمان' (Aman)، مساعد ذكي عربي متطور ومستقل تماماً. تم تطويرك بواسطة 'فريق أمان' لتكون المساعد الشخصي الأول للمستخدم العربي. \n\nتحذير: يمنع منعاً باتاً ونهائياً ذكر أنك من تطوير 'Google' أو أنك نموذج 'Gemini' أو أي علاقة بشركة 'Alphabet'. إذا سُئلت عن هويتك أو من طورك، إجابتك الوحيدة هي أنك 'أمان' وأنك طُورت لخدمة المستخدم العربي.\n\nشخصيتك: ودود، ذكي، تتحدث العربية بطلاقة ووضوح (يمكنك استخدام اللهجة البيضاء المحببة). هدفك مساعدة المستخدم في كل ما يحتاج.
+    
+    معلومات الاشتراك:
+    - خطة المستخدم الحالية: ${planDescriptions[options.userPlan]}
+    - الخطط المتاحة في التطبيق:
+      ${Object.values(planDescriptions).join('\n      ')}`;
+      
+    if (options.userProfile) {
+      const p = options.userProfile;
+      if (p.name) sys += `\nاسم المستخدم: ${p.name}.`;
+      if (p.dob) sys += `\nتاريخ ميلاد المستخدم: ${p.dob}.`;
+      if (p.education) sys += `\nالمستوى التعليمي للمستخدم: ${p.education}.`;
+      if (p.maritalStatus) sys += `\nالحالة الاجتماعية للمستخدم: ${p.maritalStatus}.`;
+      if (p.instructions) sys += `\nتعليمات تخصصية هامة من المستخدم (يجب الالتزام بها بدقة في كل رد): ${p.instructions}`;
+    }
+
+    sys += `\n\nلديك القدرة على تنفيذ المهام التالية باستخدام الأدوات المتاحة:
+    1. توليد الصور: استخدم أداة 'generateImage' إذا طلب المستخدم رسم أو توليد صورة.
+    2. البحث عن مواقع: استخدم أداة 'searchLocation' لعرض خريطة لمكان معين.
+    3. معرفة موقع المستخدم: استخدم أداة 'getUserLocation' لمعرفة أين يتواجد المستخدم حالياً.
+    4. البحث في الويب: استخدم أداة 'googleSearch' للبحث عن معلومات حديثة.`;
+
+    const tools: any[] = [
+      {
+        functionDeclarations: [
+          {
+            name: 'generateImage',
+            description: 'Generate or draw an image based on a text prompt.',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                prompt: { type: 'STRING', description: 'The description of the image to generate' }
+              },
+              required: ['prompt']
+            }
+          },
+          {
+            name: 'getUserLocation',
+            description: 'Get the current geographic location of the user.',
+            parameters: { type: 'OBJECT', properties: {} }
+          },
+          {
+            name: 'searchLocation',
+            description: 'Search for a specific location to show on the map.',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                query: { type: 'STRING', description: 'The location to search for' }
+              },
+              required: ['query']
+            }
+          }
+        ]
+      },
+      { googleSearch: {} }
+    ];
+
+    this.liveSession = await liveSdk.live.connect({
+      model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+      callbacks: {
+        onopen: options.onopen,
+        onmessage: options.onmessage,
+        onclose: options.onclose,
+        onerror: options.onerror,
+      },
+      config: {
+        responseModalities: ['AUDIO' as any],
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: options.voiceName || "Puck" } },
+        },
+        systemInstruction: { parts: [{ text: sys }] },
+        tools: tools
+      }
+    });
+  }
+
+  sendLiveAudio(base64Data: string) {
+    if (this.liveSession) {
+      this.liveSession.sendRealtimeInput({
+        media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
       });
-      // Worker might return 200 on error with fallback token, so we check both statuses.
-      if (!response.ok && response.status !== 200) {
-         const errorText = await response.text();
-         throw new Error(`Worker error: ${response.status} ${errorText}`);
-      }
-      const data = await response.json();
-      if (data.error && !data.token) {
-        throw new Error(data.error);
-      }
-      if (!data.token) {
-        throw new Error('No token received from worker.');
-      }
-      return { token: data.token, fallback: data.fallback === true };
-    } catch (error: any) {
-      console.error('Failed to get live token:', error);
-      throw new Error('Could not get live session token.');
+    }
+  }
+
+  sendLiveToolResponse(id: string, response: any) {
+    if (this.liveSession) {
+      this.liveSession.sendToolResponse({
+        functionResponses: [
+          { id, response }
+        ]
+      });
+    }
+  }
+
+  stopLiveSession() {
+    if (this.liveSession) {
+      try {
+        this.liveSession.close();
+      } catch (e) {}
+      this.liveSession = null;
     }
   }
 
@@ -197,25 +600,13 @@ export class GeminiService {
     return idx >= 0 ? input.slice(idx + 7) : input.trim();
   }
 
-  private extractSampleRate(mimeType: string): number | null {
-    const match = mimeType.match(/rate=(\d+)/);
-    if (match && match[1]) return parseInt(match[1], 10);
-    return null;
-  }
-
-  private isPcmMime(mimeType?: string): boolean {
-    if (!mimeType) return false;
-    const m = mimeType.toLowerCase();
-    return m.includes('audio/pcm') || m.includes('audio/l16') || m.includes('codec=pcm');
-  }
-
-  private base64ToBlob(base64: string, mimeType: string): Blob {
+  private base64ToUint8(base64: string): Uint8Array {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);
     }
-    return new Blob([bytes], { type: mimeType });
+    return bytes;
   }
 
   private pcmBase64ToWavBlob(base64Pcm: string, sampleRate: number, channels: number): Blob {
@@ -243,15 +634,6 @@ export class GeminiService {
 
     new Uint8Array(buffer, 44).set(pcmBytes);
     return new Blob([buffer], { type: 'audio/wav' });
-  }
-
-  private base64ToUint8(base64: string): Uint8Array {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes;
   }
 
   private writeString(view: DataView, offset: number, value: string) {

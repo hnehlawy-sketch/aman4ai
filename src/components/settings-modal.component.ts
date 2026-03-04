@@ -1,20 +1,20 @@
-import { Component, inject, input, WritableSignal, computed, signal, OnInit } from '@angular/core';
+import { Component, inject, input, WritableSignal, computed, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { UiService } from '../services/ui.service';
 import { AuthService } from '../services/auth.service';
+import { translations } from '../translations';
 
 @Component({
   selector: 'app-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule],
   template: `
     <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
        <!-- Backdrop -->
        <div (click)="uiService.closeSettingsModal()" class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-[fadeIn_0.2s_ease-out]"></div>
        
        <!-- Modal Content -->
-       <div class="w-full max-w-md rounded-3xl shadow-2xl p-8 relative z-10 animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)] overflow-y-auto max-h-[90vh]"
+       <div class="w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl p-5 sm:p-8 relative z-10 animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)] overflow-y-auto max-h-[90vh] sm:max-h-[85vh]"
             [class.bg-white]="themeSignal()() === 'light'"
             [class.bg-slate-900]="themeSignal()() === 'dark'"
             [class.border]="themeSignal()() === 'dark'"
@@ -28,112 +28,17 @@ import { AuthService } from '../services/auth.service';
 
          <!-- Header -->
          <div class="flex flex-col items-center mb-6">
-            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-500/10 to-amber-500/10 flex items-center justify-center shadow-lg mb-4 text-orange-500 border border-orange-500/10">
+            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 flex items-center justify-center shadow-lg mb-4 text-blue-500 border border-blue-500/10">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-7 h-7">
                  <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 0 0 2.572-1.065z M9 12a3 3 0 1 0 6 0a3 3 0 0 0-6 0" />
               </svg>
             </div>
-            <h1 class="text-xl font-bold">{{ t().settings }}</h1>
+            <h1 class="text-xl font-bold text-slate-800 dark:text-white">{{ t().settings }}</h1>
          </div>
 
          <!-- Settings List -->
          <div class="space-y-2">
-           <!-- Premium Section -->
-           <div class="mb-4">
-             @if (authService.isPremium()) {
-               <div class="p-4 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-lg flex items-center gap-3">
-                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
-                   <path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" />
-                 </svg>
-                 <span class="font-bold text-sm">{{ t().isPremiumUser }}</span>
-               </div>
-             } @else {
-               <button (click)="showUpgradeForm.set(!showUpgradeForm())" 
-                       class="w-full p-4 rounded-2xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300 flex items-center justify-between group transition-all">
-                 <div class="flex items-center gap-3">
-                   <div class="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
-                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
-                       <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                     </svg>
-                   </div>
-                   <div class="text-left">
-                     <p class="font-bold text-sm">{{ t().upgradePremium }}</p>
-                     <p class="text-[10px] opacity-70">{{ t().premiumSoon }}</p>
-                   </div>
-                 </div>
-                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 transition-transform" [class.rotate-90]="showUpgradeForm()">
-                   <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                 </svg>
-               </button>
-
-               @if (showUpgradeForm()) {
-                 <div class="mt-3 p-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800/50 animate-slide-up">
-                    <h3 class="text-xs font-bold uppercase tracking-wider opacity-60 mb-3">{{ t().premiumFeatures }}</h3>
-                    <ul class="space-y-2 mb-6">
-                      <li class="flex items-center gap-2 text-xs opacity-80">
-                        <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
-                        {{ t().premiumFeature1 }}
-                      </li>
-                      <li class="flex items-center gap-2 text-xs opacity-80">
-                        <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
-                        {{ t().premiumFeature2 }}
-                      </li>
-                      <li class="flex items-center gap-2 text-xs opacity-80">
-                        <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
-                        {{ t().premiumFeature3 }}
-                      </li>
-                    </ul>
-
-                    <div class="p-4 rounded-xl bg-orange-500/10 border border-orange-500/20 mb-4">
-                      <h4 class="text-xs font-bold text-orange-600 mb-2">{{ t().paymentInstructions }}</h4>
-                      <p class="text-[11px] leading-relaxed opacity-80 mb-3">{{ t().paymentStep1 }}</p>
-                      
-                      <div class="flex flex-col items-center gap-2 mb-4">
-                         <div class="p-2 bg-white rounded-2xl shadow-md border border-orange-100">
-                            <!-- Dynamic QR Code -->
-                            <img [src]="systemSettings().qrCodeUrl || 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=SHAM_CASH_QR_PLACEHOLDER'" 
-                                 [alt]="t().paymentStep2"
-                                 class="w-32 h-32 object-contain">
-                         </div>
-                         <span class="text-[10px] font-bold opacity-50">{{ t().paymentStep2 }}</span>
-                      </div>
-
-                      <p class="text-[11px] leading-relaxed opacity-80">{{ t().paymentStep3 }}</p>
-                    </div>
-
-                    @if (paymentSubmitted()) {
-                      <div class="p-3 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 text-xs font-medium border border-green-100 dark:border-green-800">
-                        {{ t().paymentPending }}
-                      </div>
-                    } @else {
-                      <div class="space-y-3">
-                        <input [(ngModel)]="transactionId" 
-                               type="text" 
-                               [placeholder]="t().transactionId"
-                               class="w-full px-4 py-2.5 rounded-xl border text-sm focus:ring-2 focus:ring-orange-500/20 outline-none transition-all"
-                               [class.bg-white]="themeSignal()() === 'light'"
-                               [class.bg-slate-900]="themeSignal()() === 'dark'"
-                               [class.border-gray-200]="themeSignal()() === 'light'"
-                               [class.border-slate-700]="themeSignal()() === 'dark'">
-                        
-                        <button (click)="submitPayment()"
-                                [disabled]="!transactionId || isSubmitting()"
-                                class="w-full py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-sm shadow-lg active:scale-95 transition-all disabled:opacity-50">
-                          @if (isSubmitting()) {
-                            <svg class="animate-spin h-4 w-4 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                          } @else {
-                            {{ t().submitPayment }}
-                          }
-                        </button>
-                      </div>
-                    }
-                 </div>
-               }
-             }
-           </div>
+           <!-- User Personalization -->
 
            <!-- User Personalization -->
            <button (click)="uiService.openPersonalizationModal()" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
@@ -156,7 +61,7 @@ import { AuthService } from '../services/auth.service';
                    </svg>
                    <span class="text-sm">{{ t().language }}</span>
                </div>
-               <span class="text-xs font-bold px-2 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200">
+               <span class="text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
                  {{ langSignal()() === 'ar' ? 'العربية' : 'English' }}
                </span>
            </button>
@@ -169,49 +74,47 @@ import { AuthService } from '../services/auth.service';
                    </svg>
                    <span class="text-sm">{{ t().darkMode }}</span>
                </div>
-               <div class="w-8 h-4 bg-gray-300 dark:bg-gray-600 rounded-full relative transition-colors">
-                  <div class="absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all duration-300"
-                       [class.left-0.5]="langSignal()() === 'en' && themeSignal()() === 'light'"
-                       [class.right-0.5]="langSignal()() === 'en' && themeSignal()() === 'dark'"
-                       [class.right-0.5]="langSignal()() === 'ar' && themeSignal()() === 'light'"
-                       [class.left-0.5]="langSignal()() === 'ar' && themeSignal()() === 'dark'"></div>
+               <div class="w-10 h-5 rounded-full relative transition-colors duration-300"
+                    [class.bg-gray-300]="themeSignal()() === 'light'"
+                    [class.bg-blue-500]="themeSignal()() === 'dark'">
+                  <div class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-sm"
+                       [class.left-0.5]="themeSignal()() === 'light'"
+                       [class.translate-x-5]="themeSignal()() === 'dark'"
+                       [class.left-0.5]="themeSignal()() === 'dark'"></div>
                </div>
            </button>
+
+           <!-- Export Chat -->
+           <button (click)="uiService.openExportModal(); uiService.closeSettingsModal()" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 opacity-70">
+                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+               </svg>
+               <span class="text-sm">{{ t().export }}</span>
+           </button>
+
+           <!-- Admin Panel -->
+           @if (authService.isAdmin()) {
+             <button (click)="uiService.openAdminPanel(); uiService.closeSettingsModal()" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-blue-600 font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 border border-blue-100 dark:border-blue-900/50">
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                 </svg>
+                 <span class="text-sm">{{ t().adminPanel }}</span>
+             </button>
+           }
          </div>
        </div>
     </div>
   `
 })
-export class SettingsModalComponent implements OnInit {
+export class SettingsModalComponent {
   uiService = inject(UiService);
   authService = inject(AuthService);
   
-  t = input.required<any>();
-  themeSignal = input.required<WritableSignal<'light' | 'dark'>>();
-  langSignal = input.required<WritableSignal<'ar' | 'en'>>();
-  modelSignal = input.required<WritableSignal<'fast' | 'core' | 'pro'>>();
+  t = input<any>(translations.ar);
+  themeSignal = input<WritableSignal<'light' | 'dark'>>(signal('light') as any);
+  langSignal = input<WritableSignal<'ar' | 'en'>>(signal('ar') as any);
+  modelSignal = input<WritableSignal<'fast' | 'core' | 'pro'>>(signal('fast') as any);
 
-  showUpgradeForm = signal(false);
-  transactionId = '';
-  isSubmitting = signal(false);
-  qrPreview = signal<string | null>(null);
-  isUploadingQr = signal(false);
-  paymentSubmitted = signal(false);
-  systemSettings = signal<any>({});
-
-  ngOnInit() {
-    this.loadSettings();
-  }
-
-  async loadSettings() {
-    try {
-      const settings = await this.authService.getSystemSettings();
-      this.systemSettings.set(settings);
-    } catch (e) {
-      console.error('Failed to load system settings', e);
-    }
-  }
-  
   toggleLang() {
     this.langSignal().update(l => l === 'ar' ? 'en' : 'ar');
   }
@@ -222,19 +125,5 @@ export class SettingsModalComponent implements OnInit {
       localStorage.setItem('aman_theme', newT);
       return newT;
     });
-  }
-
-  async submitPayment() {
-    if (!this.transactionId) return;
-    this.isSubmitting.set(true);
-    try {
-      await this.authService.submitPaymentRequest(this.transactionId);
-      this.paymentSubmitted.set(true);
-      this.transactionId = '';
-    } catch (e) {
-      console.error('Payment submission failed', e);
-    } finally {
-      this.isSubmitting.set(false);
-    }
   }
 }

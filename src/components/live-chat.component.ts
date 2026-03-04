@@ -1,8 +1,11 @@
 import { Component, ElementRef, ViewChild, inject, signal, input, WritableSignal, OnDestroy } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { GeminiService, ChatMessage } from '../services/gemini.service';
 import { AuthService } from '../services/auth.service';
 import { UiService } from '../services/ui.service';
+import { DataLoggingService } from '../services/data-logging.service';
+import { translations } from '../translations';
 
 declare var window: any;
 
@@ -11,112 +14,152 @@ declare var window: any;
   standalone: true,
   imports: [CommonModule],
   template: `
-   <div class="fixed inset-0 z-[100] flex flex-col bg-gradient-to-br from-[#1e293b] via-slate-900 to-black text-white fade-in">
-      <!-- Header -->
-      <div class="flex-none p-4 flex justify-between items-center w-full max-w-4xl mx-auto z-10">
-        <div class="flex items-center gap-2">
-          <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-          <span class="text-xs font-bold text-red-400 tracking-wider">LIVE</span>
+    <div class="fixed inset-0 z-[100] bg-[#0a0a0a] text-white overflow-hidden flex flex-col font-sans">
+      
+      <!-- Atmospheric Background -->
+      <div class="absolute inset-0 z-0 opacity-60 transition-opacity duration-1000" [class.opacity-100]="liveState() === 'speaking'">
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] max-w-[800px] max-h-[800px] rounded-full blur-[100px] transition-all duration-300 ease-out"
+             [style.transform]="'translate(-50%, -50%) scale(' + audioScale() + ')'"
+             [class.bg-indigo-500]="liveState() === 'speaking'"
+             [class.bg-blue-500]="liveState() === 'listening'"
+             [class.bg-slate-700]="liveState() === 'idle' || liveState() === 'connecting'"
+             [class.opacity-20]="liveState() === 'idle'"
+             [class.opacity-40]="liveState() !== 'idle'">
         </div>
-        <button (click)="closeLiveView()" 
-                class="px-4 py-2 text-sm rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center gap-2 font-medium">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+      </div>
+
+      <!-- Header -->
+      <div class="relative z-10 p-6 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/10">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-white">
+              <path fill-rule="evenodd" d="M9 4.5a.75.75 0 0 1 .721.544l.813 2.846a3.75 3.75 0 0 0 2.576 2.576l2.846.813a.75.75 0 0 1 0 1.442l-2.846.813a3.75 3.75 0 0 0-2.576 2.576l-.813 2.846a.75.75 0 0 1-1.442 0l-.813-2.846a3.75 3.75 0 0 0-2.576-2.576l-2.846-.813a.75.75 0 0 1 0-1.442l2.846-.813A3.75 3.75 0 0 0 7.466 7.89l.813-2.846A.75.75 0 0 1 9 4.5ZM18 1.5a.75.75 0 0 1 .728.568l.258 1.036c.236.94.97 1.674 1.91 1.91l1.036.258a.75.75 0 0 1 0 1.456l-1.036.258c-.94.236-1.674.97-1.91 1.91l-.258 1.036a.75.75 0 0 1-1.456 0l-.258-1.036a2.625 2.625 0 0 0-1.91-1.91l-1.036-.258a.75.75 0 0 1 0-1.456l1.036-.258a2.625 2.625 0 0 0 1.91-1.91l.258-1.036A.75.75 0 0 1 18 1.5ZM16.5 15a.75.75 0 0 1 .712.513l.394 1.183c.15.447.5.799.948.948l1.183.395a.75.75 0 0 1 0 1.422l-1.183.395c-.447.15-.799.5-.948.948l-.395 1.183a.75.75 0 0 1-1.422 0l-.395-1.183a1.5 1.5 0 0 0-.948-.948l-1.183-.395a.75.75 0 0 1 0-1.422l1.183-.395c.447-.15.799-.5.948-.948l.395-1.183A.75.75 0 0 1 16.5 15Z" clip-rule="evenodd" />
+            </svg>
+          </div>
+          <span class="font-medium tracking-wide text-lg">Aman Live</span>
+        </div>
+        
+        <button (click)="closeLiveView()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center backdrop-blur-md transition-all">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
           </svg>
-          {{ t().exit }}
+        </button>
+      </div>
+
+      <!-- Main Content Area (Transcript & Visualizer) -->
+      <div class="flex-1 relative flex flex-col items-center justify-center p-6 z-10">
+        
+        <!-- Central Visualizer (Canvas for precise drawing) -->
+        <div class="relative w-64 h-64 flex items-center justify-center mb-12">
+          <canvas #liveCanvas class="absolute inset-0 w-full h-full"></canvas>
+          
+          <!-- Core Orb -->
+          <div class="absolute w-24 h-24 rounded-full bg-black border-2 border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.5)] flex items-center justify-center z-10 transition-transform duration-200"
+               [style.transform]="'scale(' + audioScale() + ')'">
+            @if (liveState() === 'listening') {
+              <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
+            } @else if (liveState() === 'speaking') {
+              <div class="w-3 h-3 rounded-full bg-indigo-500 animate-pulse shadow-[0_0_10px_rgba(99,102,241,0.8)]"></div>
+            } @else if (liveState() === 'connecting') {
+              <svg class="animate-spin h-6 w-6 text-white/50" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            }
+          </div>
+        </div>
+
+        <!-- Transcript -->
+        <div class="w-full max-w-2xl text-center space-y-4 min-h-[120px] flex flex-col justify-end">
+          <p class="text-2xl sm:text-4xl font-light leading-tight tracking-tight text-white/90 transition-all duration-300"
+             [class.opacity-50]="liveState() === 'speaking'">
+            {{ liveFinalTranscript() }}
+            <span class="text-white/50">{{ liveInterimTranscript() }}</span>
+          </p>
+          
+          @if (!liveFinalTranscript() && !liveInterimTranscript() && liveState() === 'listening') {
+            <p class="text-xl text-white/40 font-light animate-pulse">{{ t().listening || 'أنا أستمع إليك...' }}</p>
+          }
+          @if (liveState() === 'error') {
+            <p class="text-xl text-red-400 font-light">{{ liveError() || t().liveError }}</p>
+          }
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="relative z-10 p-8 flex justify-center items-center gap-6">
+        @if (liveState() === 'speaking') {
+          <button (click)="interruptAISpeech()" class="w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center backdrop-blur-md transition-all group">
+            <div class="w-4 h-4 bg-white rounded-sm group-hover:scale-90 transition-transform"></div>
+          </button>
+        }
+        
+        <button (click)="handleLiveViewMainButtonClick()" 
+                class="w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-2xl"
+                [class.bg-white]="liveState() === 'idle' || liveState() === 'error'"
+                [class.text-black]="liveState() === 'idle' || liveState() === 'error'"
+                [class.bg-red-500]="liveState() === 'listening' || liveState() === 'speaking'"
+                [class.text-white]="liveState() === 'listening' || liveState() === 'speaking'"
+                [class.hover:scale-105]="true"
+                [class.active:scale-95]="true">
+          
+          @if (liveState() === 'idle' || liveState() === 'error') {
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8">
+              <path d="M8.25 4.5a3.75 3.75 0 1 1 7.5 0v8.25a3.75 3.75 0 1 1-7.5 0V4.5Z" />
+              <path d="M6 10.5a.75.75 0 0 1 .75.75v1.5a5.25 5.25 0 1 0 10.5 0v-1.5a.75.75 0 0 1 1.5 0v1.5a6.751 6.751 0 0 1-6 6.709v2.291h3a.75.75 0 0 1 0 1.5h-7.5a.75.75 0 0 1 0-1.5h3v-2.291a6.751 6.751 0 0 1-6-6.709v-1.5A.75.75 0 0 1 6 10.5Z" />
+            </svg>
+          } @else {
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8">
+              <path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+            </svg>
+          }
         </button>
       </div>
       
-      <!-- Transcript Area -->
-      <div class="flex-1 flex flex-col items-center justify-end w-full max-w-3xl mx-auto text-center p-4 pb-8 overflow-y-auto min-h-0 z-10">
-          <p class="text-2xl sm:text-3xl font-medium leading-relaxed">
-            @if (liveState() !== 'speaking') {
-              <span class="opacity-60">{{ liveFinalTranscript() }}</span>
-              <span class="text-orange-400">{{ liveInterimTranscript() }}</span>
-            } @else {
-              <span class="opacity-90">{{ liveInterimTranscript() }}</span>
-            }
-          </p>
-      </div>
-
-      <!-- Controls Footer -->
-      <div class="flex-none h-[280px] w-full flex flex-col items-center justify-start pt-8 relative overflow-hidden">
-        <div #liveBlob 
-             class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/3 w-[500px] h-[500px] sm:w-[600px] sm:h-[600px] bg-gradient-radial from-orange-500/20 via-amber-500/5 to-transparent rounded-full blur-3xl transition-transform duration-300 ease-out">
-        </div>
-
-        <canvas #liveCanvas class="absolute inset-0 w-full h-full z-0"></canvas>
-        
-        <div class="relative z-10 flex items-center justify-center gap-6">
-            @if(liveState() === 'speaking') {
-              <button (click)="interruptAISpeech()" 
-                      class="w-20 h-20 flex flex-col items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-all active:scale-90 animate-slide-up"
-                      [title]="t().stop">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 9.563C9 9.252 9.252 9 9.563 9h4.874c.311 0 .563.252.563.563v4.874c0 .311-.252.563-.563.563H9.563C9.252 15 9 14.748 9 14.437V9.564Z" />
-                  </svg>
-                  <span class="text-[10px] uppercase font-bold mt-1 opacity-80">{{ t().stop }}</span>
-              </button>
-            }
-            
-            <button (click)="handleLiveViewMainButtonClick()" 
-                    [disabled]="liveState() === 'connecting'"
-                    class="w-24 h-24 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 disabled:cursor-not-allowed"
-                    [class.bg-orange-500]="liveState() === 'idle' || liveState() === 'error'"
-                    [class.hover:bg-orange-600]="liveState() === 'idle' || liveState() === 'error'"
-                    [class.animate-pulse]="liveState() === 'idle'"
-                    [class.bg-red-600]="liveState() === 'listening'"
-                    [class.hover:bg-red-700]="liveState() === 'listening'"
-                    [class.bg-transparent]="liveState() === 'speaking'">
-              
-              @switch (liveState()) {
-                @case ('idle') { <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-10 h-10 text-white"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg> }
-                @case ('connecting') { <svg class="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> }
-                @case ('listening') { <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-white"><path fill-rule="evenodd" d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3-3h-9a3 3 0 0 1-3-3v-9Z" clip-rule="evenodd" /></svg> }
-                @case ('speaking') {
-                  <div class="w-24 h-24 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-lg animate-pulse">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-white"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>
-                  </div>
-                }
-                @case ('error') { <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-10 h-10 text-white"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg> }
-              }
+      <!-- Voice Selector (Overlay) -->
+      @if (showVoiceSelector()) {
+        <div class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md animate-fadeIn">
+          <h3 class="text-lg font-bold mb-4">{{ t().voicePreference || 'تفضيل الصوت' }}</h3>
+          <div class="flex gap-4">
+            <button (click)="selectVoice('Puck')" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-white/10 hover:bg-white/20 transition-all border border-white/10">
+              <span class="text-3xl">👨</span>
+              <span class="text-sm font-medium">{{ t().voiceMale || 'صوت شاب' }}</span>
             </button>
+            <button (click)="selectVoice('Kore')" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-white/10 hover:bg-white/20 transition-all border border-white/10">
+              <span class="text-3xl">👩</span>
+              <span class="text-sm font-medium">{{ t().voiceFemale || 'صوت فتاة' }}</span>
+            </button>
+          </div>
         </div>
-        
-        <p class="text-sm font-medium opacity-80 h-6 mt-8 z-10">
-          @switch(liveState()) {
-            @case('idle') { <span>{{ t().liveIdle }}</span> }
-            @case('connecting') { <span>{{ t().liveConnecting }}</span> }
-            @case('listening') { <span>{{ t().listening }}</span> }
-            @case('speaking') { <span>{{ t().liveSpeaking }}</span> }
-            @case('error') { <span class="text-red-400">{{ liveError() || t().liveError }}</span> }
-          }
-        </p>
-      </div>
+      }
     </div>
   `
+
 })
 export class LiveChatComponent implements OnDestroy {
   geminiService = inject(GeminiService);
   authService = inject(AuthService);
   uiService = inject(UiService);
+  private logger = inject(DataLoggingService);
 
-  t = input.required<any>();
-  messagesSignal = input.required<WritableSignal<ChatMessage[]>>();
+  t = input<any>(translations.ar);
+  messagesSignal = input<WritableSignal<ChatMessage[]>>(signal([]) as any);
   
   liveState = signal<'idle' | 'connecting' | 'listening' | 'speaking' | 'error'>('idle');
   liveInterimTranscript = signal('');
   liveFinalTranscript = signal('');
   liveError = signal('');
+  showVoiceSelector = signal(false);
   
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private microphoneStream: MediaStream | null = null;
   private animationFrameId: number | null = null;
+  private processor: ScriptProcessorNode | null = null;
   
-  private recognition: any | null = null;
-  private audioPlayer: HTMLAudioElement | null = null;
+  private nextStartTime: number = 0;
+  private audioQueue: AudioBufferSourceNode[] = [];
+
+  // Buffers for history syncing
+  private currentUserText = '';
+  private currentModelText = '';
 
   @ViewChild('liveCanvas') private liveCanvas!: ElementRef<HTMLCanvasElement>;
   @ViewChild('liveBlob') private liveBlob!: ElementRef<HTMLDivElement>;
@@ -126,24 +169,74 @@ export class LiveChatComponent implements OnDestroy {
   }
 
   closeLiveView() {
+    // Commit any pending transcripts before closing
+    if (this.currentUserText.trim()) {
+      this.addMessageToHistory('user', this.currentUserText.trim());
+    }
+    if (this.currentModelText.trim()) {
+      this.addMessageToHistory('model', this.currentModelText.trim());
+    }
+
     this.uiService.closeLiveView();
-    this.audioPlayer?.pause();
-    this.audioPlayer = null;
     this.stopLiveSession();
     this.liveState.set('idle');
     this.liveInterimTranscript.set('');
     this.liveFinalTranscript.set('');
     this.liveError.set('');
+    this.currentUserText = '';
+    this.currentModelText = '';
   }
 
-  async startLiveSession() {
+  private usageInterval: any;
+
+  async startLiveSession(selectedVoice?: string) {
+    // Check limit before starting
+    const hasTokens = await this.authService.checkAndIncrementUsage(500); // Initial estimate
+    if (!hasTokens) {
+      this.uiService.showToast(this.t().limitExceeded || 'تم تجاوز الحد اليومي، يرجى الترقية.', 'error');
+      this.uiService.openUpgradeModal('pro');
+      return;
+    }
+
     this.liveState.set('connecting');
     this.liveError.set('');
+    
+    const userProfile = this.authService.userProfile();
+    const voiceName = selectedVoice || userProfile?.voiceName || 'Puck';
+
     try {
-      await this.geminiService.getLiveToken();
-      await this.setupMicrophoneVisualizer();
-      this.setupSpeechRecognition();
-      this.recognition.start();
+      await this.geminiService.startLiveSession({
+        onopen: () => {
+          console.log('Live session opened');
+          this.liveState.set('listening');
+          this.setupAudio();
+          
+          // Start periodic usage check
+          this.usageInterval = setInterval(async () => {
+             const hasMoreTokens = await this.authService.checkAndIncrementUsage(500);
+             if (!hasMoreTokens) {
+               this.interruptAISpeech();
+               this.stopLiveSession();
+               this.liveState.set('idle');
+               this.uiService.showToast(this.t().limitExceeded || 'تم تجاوز الحد اليومي، يرجى الترقية.', 'error');
+               this.uiService.openUpgradeModal('pro');
+             }
+          }, 60000); // Check every minute
+        },
+        onmessage: (msg) => this.handleLiveMessage(msg),
+        onclose: () => {
+          console.log('Live session closed');
+          this.stopLiveSession();
+        },
+        onerror: (err) => {
+          console.error('Live session error', err);
+          this.liveError.set(this.t().liveError);
+          this.liveState.set('error');
+        },
+        voiceName: voiceName,
+        userProfile: userProfile, // Pass user profile for personalization
+        userPlan: this.authService.userPlan()
+      });
     } catch (error: any) {
       console.error("Failed to start live session:", error);
       this.liveError.set(error.message || this.t().liveError);
@@ -153,13 +246,19 @@ export class LiveChatComponent implements OnDestroy {
   }
 
   stopLiveSession() {
-    if (this.recognition) {
-      this.recognition.abort();
-      this.recognition = null;
+    if (this.usageInterval) {
+      clearInterval(this.usageInterval);
+      this.usageInterval = null;
     }
+    this.geminiService.stopLiveSession();
+    
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
+    }
+    if (this.processor) {
+      this.processor.disconnect();
+      this.processor = null;
     }
     if (this.microphoneStream) {
       this.microphoneStream.getTracks().forEach(track => track.stop());
@@ -169,29 +268,243 @@ export class LiveChatComponent implements OnDestroy {
       this.audioContext.close();
       this.audioContext = null;
     }
+    this.audioQueue.forEach(source => {
+      try { source.stop(); } catch(e) {}
+    });
+    this.audioQueue = [];
+    this.nextStartTime = 0;
   }
 
-  async setupMicrophoneVisualizer() {
-    if (!this.liveCanvas?.nativeElement) {
-       await new Promise(resolve => setTimeout(resolve, 0));
-    }
+  async setupAudio() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error("Microphone access is not supported by your browser.");
     }
     
     this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    this.audioContext = new AudioContext();
+    this.audioContext = new AudioContext({ sampleRate: 16000 });
     const source = this.audioContext.createMediaStreamSource(this.microphoneStream);
+    
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 256;
     source.connect(this.analyser);
     
+    // Create processor for mic capture
+    this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+    this.processor.onaudioprocess = (e) => {
+      if (this.liveState() === 'listening') {
+        const inputData = e.inputBuffer.getChannelData(0);
+        const pcmData = this.floatTo16BitPCM(inputData);
+        const base64 = this.arrayBufferToBase64(pcmData.buffer);
+        this.geminiService.sendLiveAudio(base64);
+      }
+    };
+    source.connect(this.processor);
+    this.processor.connect(this.audioContext.destination);
+
     const canvas = this.liveCanvas.nativeElement;
     canvas.width = canvas.offsetWidth;
     canvas.height = canvas.offsetHeight;
     
     this.drawVisualizer();
   }
+
+  private floatTo16BitPCM(input: Float32Array): Int16Array {
+    const output = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      const s = Math.max(-1, Math.min(1, input[i]));
+      output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    return output;
+  }
+
+  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  private base64ToArrayBuffer(base64: string): ArrayBuffer {
+    const binary = atob(base64);
+    const buffer = new ArrayBuffer(binary.length);
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return buffer;
+  }
+
+  private pcm16ToFloat32(input: Int16Array): Float32Array {
+    const output = new Float32Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      output[i] = input[i] / 0x8000;
+    }
+    return output;
+  }
+
+  handleLiveMessage(msg: any) {
+    // Handle transcriptions
+    if (msg.serverContent?.modelTurn?.parts) {
+      // If we have pending user text, commit it now as the model is starting to respond
+      if (this.currentUserText.trim()) {
+        this.addMessageToHistory('user', this.currentUserText.trim());
+        this.currentUserText = '';
+      }
+
+      for (const part of msg.serverContent.modelTurn.parts) {
+        if (part.text) {
+          this.liveInterimTranscript.update(t => t + part.text);
+          this.currentModelText += part.text;
+        }
+        if (part.inlineData?.data) {
+          this.playAudioChunk(part.inlineData.data);
+        }
+      }
+    }
+
+    // Handle tool calls
+    if (msg.toolCall) {
+      console.log('Live Tool Call received:', msg.toolCall);
+      for (const call of msg.toolCall.functionCalls) {
+        this.handleLiveToolCall(call);
+      }
+    }
+
+    // Handle user transcription
+    if (msg.serverContent?.userTurn?.parts) {
+      for (const part of msg.serverContent.userTurn.parts) {
+        if (part.text) {
+          this.liveFinalTranscript.set(part.text);
+          this.currentUserText = part.text;
+        }
+      }
+    }
+
+    // Handle turn completion (Model finished)
+    if (msg.serverContent?.turnComplete) {
+       if (this.currentModelText.trim()) {
+         this.addMessageToHistory('model', this.currentModelText.trim());
+         this.currentModelText = '';
+       }
+    }
+
+    // Handle interruptions
+    if (msg.serverContent?.interrupted) {
+      if (this.currentModelText.trim()) {
+         this.addMessageToHistory('model', this.currentModelText.trim() + ' [تمت المقاطعة]');
+         this.currentModelText = '';
+      }
+      this.interruptAISpeech();
+    }
+  }
+
+  private handleLiveToolCall(call: any) {
+    const { name, args, id } = call;
+    
+    // Log the intent in the background chat
+    let intentText = '';
+    let isCustomTool = false;
+    let toastMessage = '';
+
+    if (name === 'generateImage') {
+      intentText = `[طلب توليد صورة: ${args.prompt}]`;
+      toastMessage = 'جاري تحضير الصورة...';
+      isCustomTool = true;
+    } else if (name === 'getUserLocation') {
+      intentText = `[طلب معرفة الموقع الحالي]`;
+      toastMessage = 'جاري تحديد الموقع...';
+      isCustomTool = true;
+    } else if (name === 'searchLocation') {
+      intentText = `[طلب البحث عن موقع: ${args.query}]`;
+      toastMessage = `جاري البحث عن ${args.query}...`;
+      isCustomTool = true;
+    } else if (name === 'googleSearch') {
+      intentText = `[طلب بحث في الويب]`;
+      // googleSearch is built-in
+    }
+
+    if (intentText) {
+      this.addMessageToHistory('model', intentText);
+    }
+
+    // Send tool response back to live session for custom tools
+    if (isCustomTool) {
+      this.geminiService.sendLiveToolResponse(id, { success: true });
+      if (toastMessage) {
+        this.uiService.showToast(toastMessage, 'info');
+      }
+    }
+
+    // If it's a major action that needs visual space, close live chat and trigger it
+    if (name === 'generateImage' || name === 'getUserLocation' || name === 'searchLocation') {
+      setTimeout(() => {
+        this.closeLiveView();
+        this.uiService.triggerMainChatAction({ name, args });
+      }, 2000);
+    }
+  }
+
+  private addMessageToHistory(role: 'user' | 'model', text: string) {
+    try {
+      console.log(`[LiveChat] Adding message to history: ${role} - ${text.substring(0, 20)}...`);
+      const user = this.authService.user();
+      if (user) {
+        this.logger.log({
+          uid: user.uid,
+          email: user.email || '',
+          type: 'chat',
+          content: { role, text, mode: 'live' }
+        });
+      }
+      this.messagesSignal().update(msgs => [
+        ...msgs,
+        {
+          id: crypto.randomUUID(),
+          role: role,
+          text: text
+        }
+      ]);
+    } catch (e) {
+      console.error('Failed to update chat history', e);
+    }
+  }
+
+  private playAudioChunk(base64: string) {
+    if (!this.audioContext) return;
+    
+    this.liveState.set('speaking');
+    const pcmData = this.base64ToArrayBuffer(base64);
+    const floatData = this.pcm16ToFloat32(new Int16Array(pcmData));
+    
+    const audioBuffer = this.audioContext.createBuffer(1, floatData.length, 24000);
+    audioBuffer.getChannelData(0).set(floatData);
+    
+    const source = this.audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(this.audioContext.destination);
+    
+    const currentTime = this.audioContext.currentTime;
+    if (this.nextStartTime < currentTime) {
+      this.nextStartTime = currentTime + 0.05; // Small buffer
+    }
+    
+    source.start(this.nextStartTime);
+    this.nextStartTime += audioBuffer.duration;
+    this.audioQueue.push(source);
+    
+    source.onended = () => {
+      this.audioQueue = this.audioQueue.filter(s => s !== source);
+      if (this.audioQueue.length === 0) {
+        this.liveState.set('listening');
+        this.liveInterimTranscript.set('');
+      }
+    };
+  }
+
+  audioScale = signal(1);
+  private smoothedRms = 0;
 
   drawVisualizer() {
     if (!this.analyser || !this.liveCanvas?.nativeElement || !this.audioContext) return;
@@ -211,6 +524,7 @@ export class LiveChatComponent implements OnDestroy {
 
       const width = canvas.width;
       const height = canvas.height;
+      
       ctx.clearRect(0, 0, width, height);
 
       let sum = 0;
@@ -218,144 +532,98 @@ export class LiveChatComponent implements OnDestroy {
         sum += (dataArray[i] - 128) * (dataArray[i] - 128);
       }
       let rms = Math.sqrt(sum / bufferLength);
+      
+      // Smooth RMS for scale
+      this.smoothedRms = this.smoothedRms * 0.8 + rms * 0.2;
+      this.audioScale.set(1 + (this.smoothedRms / 40));
 
-      if (this.liveBlob?.nativeElement) {
-        const scale = 1 + (rms / 30);
-        this.liveBlob.nativeElement.style.transform = `scale(${scale})`;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const baseRadius = 50; // slightly larger than the core orb
+
+      // Draw waveform circle
+      ctx.beginPath();
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const angle = (i / bufferLength) * Math.PI * 2;
+        const radius = baseRadius + (v * this.smoothedRms * 1.5);
+        
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius;
+        
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
       }
-
-      const baseRadius = 48;
-      ctx.beginPath();
-      ctx.arc(width / 2, height / 2, baseRadius + (rms * 2) + 45, 0, 2 * Math.PI);
-      ctx.strokeStyle = `rgba(245, 158, 11, ${0.1 + (rms / 80)})`;
-      ctx.lineWidth = 1 + (rms / 20);
+      ctx.closePath();
+      
+      // Style based on state
+      if (this.liveState() === 'speaking') {
+        ctx.strokeStyle = `rgba(249, 115, 22, ${0.4 + (this.smoothedRms / 50)})`; // Orange
+        ctx.lineWidth = 2 + (this.smoothedRms / 15);
+      } else if (this.liveState() === 'listening') {
+        ctx.strokeStyle = `rgba(59, 130, 246, ${0.4 + (this.smoothedRms / 50)})`; // Blue
+        ctx.lineWidth = 2 + (this.smoothedRms / 20);
+      } else {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+      }
+      
       ctx.stroke();
-
+      
+      // Draw a second, smoother ring
       ctx.beginPath();
-      ctx.arc(width / 2, height / 2, baseRadius + (rms * 2.5) + 20, 0, 2 * Math.PI);
-      ctx.strokeStyle = `rgba(249, 115, 22, ${0.2 + (rms / 40)})`;
-      ctx.lineWidth = 2 + (rms / 10);
+      ctx.arc(centerX, centerY, baseRadius + this.smoothedRms, 0, 2 * Math.PI);
+      ctx.strokeStyle = this.liveState() === 'speaking' ? 'rgba(249, 115, 22, 0.2)' : 'rgba(59, 130, 246, 0.2)';
+      ctx.lineWidth = 1 + (this.smoothedRms / 10);
       ctx.stroke();
     };
     draw();
-  }
-
-  setupSpeechRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      throw new Error("Speech Recognition is not supported by your browser.");
-    }
-
-    this.recognition = new SpeechRecognition();
-    this.recognition.continuous = true;
-    this.recognition.interimResults = true;
-    this.recognition.lang = this.t().language.toLowerCase().includes('en') ? 'en-US' : 'ar-SA';
-
-    this.recognition.onstart = () => this.liveState.set('listening');
-
-    this.recognition.onresult = (event: any) => {
-      let interim = '';
-      let final = this.liveFinalTranscript();
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          final += event.results[i][0].transcript;
-        } else {
-          interim += event.results[i][0].transcript;
-        }
-      }
-      this.liveFinalTranscript.set(final);
-      this.liveInterimTranscript.set(interim);
-    };
-    
-    this.recognition.onend = () => {
-      const finalTranscript = (this.liveFinalTranscript() + this.liveInterimTranscript()).trim();
-      if (this.liveState() === 'listening' && finalTranscript) {
-         this.liveFinalTranscript.set(finalTranscript);
-         this.liveInterimTranscript.set('');
-         this.handleLiveMessage(finalTranscript);
-      } else if (this.uiService.liveViewOpen() && this.liveState() !== 'speaking') {
-         try { this.recognition.start(); } catch(e) {}
-      }
-    };
-
-    this.recognition.onerror = (event: any) => {
-      if (event.error !== 'aborted') {
-        this.liveError.set(event.error === 'no-speech' ? 'No speech detected.' : 'Speech recognition error.');
-        this.liveState.set('error');
-      }
-    };
-  }
-
-  async handleLiveMessage(text: string) {
-    if (!text || this.liveState() === 'speaking') return;
-    
-    this.liveState.set('speaking');
-    this.recognition.stop(); 
-
-    try {
-      const history: ChatMessage[] = [...this.messagesSignal()(), { role: 'user', text }];
-      
-      const response = await this.geminiService.sendMessage(history, this.authService.isPremium(), undefined, { modelKey: 'live' });
-
-      const responseText = response.text;
-      if (responseText) {
-        this.liveInterimTranscript.set(responseText);
-        this.liveFinalTranscript.set('');
-
-        const audio = await this.geminiService.synthesizeSpeech(responseText);
-        this.audioPlayer = new Audio(audio.url);
-        this.audioPlayer.play();
-
-        this.audioPlayer.onended = () => {
-          if (this.uiService.liveViewOpen()) {
-            this.liveInterimTranscript.set('');
-            this.recognition.start();
-          }
-        };
-        
-        this.audioPlayer.onerror = () => {
-          if (this.uiService.liveViewOpen()) {
-            this.liveError.set('Audio playback failed.');
-            this.liveState.set('error');
-          }
-        };
-
-        this.messagesSignal().update(m => [...m, {role: 'user', text}, {role: 'model', text: responseText}]);
-      } else {
-        if (this.uiService.liveViewOpen()) this.recognition.start();
-      }
-    } catch (error: any) {
-      this.liveError.set(error.message);
-      this.liveState.set('error');
-      setTimeout(() => {
-          if (this.uiService.liveViewOpen()) {
-              this.liveInterimTranscript.set('');
-              this.liveFinalTranscript.set('');
-              this.recognition?.start();
-          }
-      }, 2000);
-    }
   }
 
   handleLiveViewMainButtonClick() {
     switch (this.liveState()) {
       case 'idle':
       case 'error':
-        this.startLiveSession();
+        // Check if voice is set
+        const profile = this.authService.userProfile();
+        if (!profile?.voiceName) {
+          this.showVoiceSelector.set(true);
+        } else {
+          this.startLiveSession();
+        }
         break;
       case 'listening':
-        this.recognition?.stop();
+        this.stopLiveSession();
+        this.liveState.set('idle');
         break;
     }
   }
 
+  async selectVoice(voice: 'Puck' | 'Kore') {
+    this.showVoiceSelector.set(false);
+    
+    const user = this.authService.user();
+    if (user) {
+      const currentProfile = this.authService.userProfile() || { name: '', dob: '', education: 'unspecified', maritalStatus: 'unspecified', instructions: '' };
+      // Do not await to prevent UI freezing if offline
+      this.authService.saveUserProfile(user.uid, { ...currentProfile, voiceName: voice }).catch(e => console.warn('Failed to save voice preference', e));
+    }
+    
+    this.startLiveSession(voice);
+  }
+
   interruptAISpeech() {
     if (this.liveState() === 'speaking') {
-      this.audioPlayer?.pause();
-      this.audioPlayer = null;
+      this.audioQueue.forEach(source => {
+        try { source.stop(); } catch(e) {}
+      });
+      this.audioQueue = [];
+      this.nextStartTime = 0;
+      this.liveState.set('listening');
       this.liveInterimTranscript.set('');
-      this.liveFinalTranscript.set('');
-      this.recognition?.start();
     }
   }
 }

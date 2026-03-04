@@ -5,6 +5,7 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { Document, Packer, Paragraph, TextRun, AlignmentType, ShadingType } from 'docx';
 import saveAs from 'file-saver';
+import { translations } from '../translations';
 
 @Component({
   selector: 'app-export-modal',
@@ -38,9 +39,9 @@ import saveAs from 'file-saver';
   `
 })
 export class ExportModalComponent {
-  t = input.required<any>();
-  theme = input.required<'light' | 'dark'>();
-  messages = input.required<ChatMessage[]>();
+  t = input<any>(translations.ar);
+  theme = input<'light' | 'dark'>('light');
+  messages = input<ChatMessage[]>([]);
   close = output<void>();
 
   exportAsTxt() {
@@ -90,7 +91,7 @@ export class ExportModalComponent {
         text.style.margin = '0';
 
         if (msg.role === 'user') {
-            msgDiv.style.backgroundColor = '#FFF9C4';
+            msgDiv.style.backgroundColor = '#E3F2FD';
             msgDiv.style.direction = 'ltr';
             text.style.textAlign = 'left';
         } else {

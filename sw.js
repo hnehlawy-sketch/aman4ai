@@ -1,8 +1,9 @@
-const CACHE_NAME = 'aman-ai-v1';
+const CACHE_NAME = 'aman-ai-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/logo.svg',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap'
 ];

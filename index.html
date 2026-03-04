@@ -6,21 +6,33 @@
   
   <!-- PWA Meta Tags -->
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#f97316">
+  <meta name="theme-color" content="#3b82f6">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Aman AI">
-  <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiPjxyZWN0IHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgcng9IjUiIGZpbGw9InVybCgjZykiLz48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB5MT0iMCIgeDI9IjI0IiB5Mj0iMjQiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBzdG9wLWNvbG9yPSIjRjk3MzE2Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjRjU5RTBCIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHBhdGggc3Ryb2tlPSIjZmZmIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41IiBkPSJNOSAxMi43NSAxMS4yNSAxNSAxNSA5Ljc1bS0zLTcuMDM2QTExLjk1OSAxMS45NTkgMCAwIDEgMy41OTggNiAxMS45OSAxMS45OSAwIDAgMCAzIDkuNzQ5YzAgNS41OTIgMy44MjQgMTAuMjkgOSAxMS42MjMgNS4xNzYtMS4zMzIgOS02LjAzIDktMTEuNjIyIDAtMS4zMS0uMjEtMi41NzEtLjU5OC0zLjc1MWgtLjE1MmMtMy4xOTYgMC02LjEtMS4yNDgtOC4yNS0zLjI4NVoiLz48L3N2Zz4=">
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="apple-touch-icon" href="/logo.svg">
   
   <title>Aman AI</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@200..1000&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
     <style>
     body {
-      font-family: 'Cairo', sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      font-size: 18px; /* Increased base size */
+      font-weight: 500; /* Medium weight by default */
       background-color: #ffffff; /* white */
       color: #1e293b; /* slate-800 */
       -webkit-tap-highlight-color: transparent;
@@ -36,6 +48,21 @@
       background: #cbd5e1;
       border-radius: 10px;
     }
+    
+    /* Hide scrollbar for horizontal scrolling areas */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    
+    .mask-fade-edges {
+      mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+    }
+
     .typing-dot {
       animation: typing 1.4s infinite ease-in-out both;
     }
@@ -94,12 +121,15 @@
       border-radius: 0.25rem; 
       font-size: 0.9em;
     }
+    .dark .prose code {
+      background-color: rgba(255,255,255,0.1);
+    }
     .prose pre code { 
       background-color: transparent; 
       padding: 0; 
       color: inherit;
     }
-    .prose a { color: #f97316; text-decoration: underline; }
+    .prose a { color: #3b82f6; text-decoration: underline; }
   </style>
 <script type="importmap">
 {
