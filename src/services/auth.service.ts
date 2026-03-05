@@ -714,15 +714,19 @@ export class AuthService {
       ctx.drawImage(baseImage, 0, 0, w, h);
 
       if (addWatermark) {
-        const watermark = await this.loadImage(this.getWatermarkSvgDataUrl());
-        const padding = Math.max(12, Math.round(w * 0.02));
-        const targetW = Math.max(140, Math.round(w * 0.25)); // Increased size
-        const ratio = (watermark.naturalWidth || watermark.width) / (watermark.naturalHeight || watermark.height);
-        const targetH = Math.round(targetW / ratio);
+        try {
+          const watermark = await this.loadImage(this.getWatermarkSvgDataUrl());
+          const padding = Math.max(12, Math.round(w * 0.02));
+          const targetW = Math.max(140, Math.round(w * 0.25)); // Increased size
+          const ratio = (watermark.naturalWidth || watermark.width) / (watermark.naturalHeight || watermark.height);
+          const targetH = Math.round(targetW / ratio);
 
-        ctx.globalAlpha = 0.8;
-        ctx.drawImage(watermark, w - targetW - padding, h - targetH - padding, targetW, targetH);
-        ctx.globalAlpha = 1;
+          ctx.globalAlpha = 0.8;
+          ctx.drawImage(watermark, w - targetW - padding, h - targetH - padding, targetW, targetH);
+          ctx.globalAlpha = 1;
+        } catch (e) {
+          console.warn('Failed to add watermark, proceeding without it', e);
+        }
       }
 
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));

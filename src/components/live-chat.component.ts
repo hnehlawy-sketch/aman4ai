@@ -87,7 +87,7 @@ declare var window: any;
                     height="100%" 
                     frameborder="0" 
                     style="border:0"
-                    [src]="'https://www.google.com/maps/embed/v1/view?key=YOUR_API_KEY&center=' + content.data.lat + ',' + content.data.lng + '&zoom=14' | safe:'resource'"
+                    [src]="'https://www.google.com/maps/embed/v1/view?key=' + (authService.systemSettings()?.mapsApiKey || 'YOUR_API_KEY') + '&center=' + content.data.lat + ',' + content.data.lng + '&zoom=14' | safe:'resource'"
                     allowfullscreen>
                   </iframe>
                   <!-- Fallback if iframe fails or key missing, using a simple static map or just a label -->
@@ -380,10 +380,13 @@ export class LiveChatComponent implements OnDestroy {
   }
 
   handleLiveMessage(msg: any) {
+    console.log('[LiveChat] Received message:', msg);
+    
     // Handle transcriptions from Model
     if (msg.serverContent?.modelTurn?.parts) {
       // If we have pending user text, commit it now as the model is starting to respond
       if (this.currentUserText.trim()) {
+        console.log('[LiveChat] Committing user text as model started speaking');
         this.liveFinalTranscript.set(this.currentUserText.trim());
         this.addMessageToHistory('user', this.currentUserText.trim());
         this.currentUserText = '';
@@ -404,6 +407,14 @@ export class LiveChatComponent implements OnDestroy {
 
     // Handle transcriptions from User (Input Audio Transcription)
     if (msg.serverContent?.userTurn?.parts) {
+      // If we have pending model text, commit it now as the user is starting to speak
+      if (this.currentModelText.trim()) {
+        console.log('[LiveChat] Committing model text as user started speaking');
+        this.addMessageToHistory('model', this.currentModelText.trim());
+        this.currentModelText = '';
+        this.liveInterimTranscript.set('');
+      }
+
       for (const part of msg.serverContent.userTurn.parts) {
         if (part.text) {
           // If it's a user turn, we show it as interim until it's "final"
@@ -444,8 +455,7 @@ export class LiveChatComponent implements OnDestroy {
 
   private async handleLiveToolCall(call: any) {
     const { name, args, id } = call;
-    
-    // Log the intent in the background chat
+    console.log(`[LiveChat] Handling tool call: ${name}`, args);
     let intentText = '';
     let isCustomTool = false;
     let toastMessage = '';
@@ -520,7 +530,8 @@ export class LiveChatComponent implements OnDestroy {
 
   private addMessageToHistory(role: 'user' | 'model', text: string) {
     try {
-      console.log(`[LiveChat] Adding message to history: ${role} - ${text.substring(0, 20)}...`);
+      if (!text.trim()) return;
+      console.log(`[LiveChat] Committing message to history: ${role} - ${text.substring(0, 30)}...`);
       const user = this.authService.user();
       if (user) {
         this.logger.log({
@@ -530,14 +541,18 @@ export class LiveChatComponent implements OnDestroy {
           content: { role, text, mode: 'live' }
         });
       }
-      this.messagesSignal().update(msgs => [
-        ...msgs,
-        {
-          id: crypto.randomUUID(),
-          role: role,
-          text: text
-        }
-      ]);
+      this.messagesSignal().update(msgs => {
+        const newMsgs = [
+          ...msgs,
+          {
+            id: crypto.randomUUID(),
+            role: role,
+            text: text
+          }
+        ];
+        console.log(`[LiveChat] Signal updated, new length: ${newMsgs.length}`);
+        return newMsgs;
+      });
     } catch (e) {
       console.error('Failed to update chat history', e);
     }

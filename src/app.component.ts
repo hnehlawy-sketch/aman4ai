@@ -601,6 +601,11 @@ export class AppComponent implements OnInit {
   }
 
   openLiveView() {
+    // If current session has messages, create a new one for the live chat
+    if (this.messages().length > 0) {
+      this.createNewChat();
+    }
+    
     // Ensure we have an active session before opening live view
     const currentId = this.currentSessionId();
     const sessions = this.sessions();
@@ -927,8 +932,8 @@ export class AppComponent implements OnInit {
 
     // 1. Image Generation Keywords
     const imageKeywords = [
-      'رسم', 'ارسم', 'صورة', 'صور', 'توليد', 'انشاء', 'تخيل', 'عدل', 'غير', 'لون', 'لبس', 'خلفية', 'صمم', 'ابدع', 'فنان', 'لوحة', 'بورتريه', 'كرتون', 'انمي', 'واقعية', 'جودة عالية', '4k', 'hd',
-      'draw', 'generate', 'image', 'picture', 'photo', 'create', 'imagine', 'edit', 'change', 'modify', 'background', 'wear', 'clothes', 'design', 'paint', 'portrait', 'cartoon', 'anime', 'realistic', 'render', 'artwork', 'sketch', 'illustration'
+      'رسم', 'ارسم', 'صورة', 'صور', 'توليد', 'انشاء', 'تخيل', 'عدل', 'غير', 'لون', 'لبس', 'خلفية', 'صمم', 'ابدع', 'فنان', 'لوحة', 'بورتريه', 'كرتون', 'انمي', 'واقعية', 'جودة عالية', '4k', 'hd', 'شعار', 'لوغو',
+      'draw', 'generate', 'image', 'picture', 'photo', 'create', 'imagine', 'edit', 'change', 'modify', 'background', 'wear', 'clothes', 'design', 'paint', 'portrait', 'cartoon', 'anime', 'realistic', 'render', 'artwork', 'sketch', 'illustration', 'logo'
     ];
 
     // 2. Map/Location Keywords
@@ -1128,23 +1133,23 @@ export class AppComponent implements OnInit {
       complete: async () => {
         this.isLoading.set(false);
         this.messageSubscription = null;
-        
-        // Check if we expected an image but got none
+                // Check if we expected an image but got none
         if (this.generateImage()) {
            const lastMsg = this.messages()[this.messages().length - 1];
            if (lastMsg.role === 'model' && (!lastMsg.generatedImages || lastMsg.generatedImages.length === 0)) {
              // We expected an image but didn't get one.
-             // It's possible the model refused or just output text.
-             // Let's add a small system note if there's absolutely no image.
-             this.messages.update(msgs => [
-               ...msgs, 
-               { 
-                 id: crypto.randomUUID(), 
-                 role: 'system', 
-                 text: this.currentLang() === 'ar' ? 'لم يتم إنشاء الصورة. قد يكون الوصف مخالفاً لسياسات المحتوى أو غير واضح.' : 'Image was not generated. The description might be unclear or violate content policies.',
-                 isError: true 
-               }
-             ]);
+             // Only add the error message if the model didn't provide a text explanation
+             if (!lastMsg.text || lastMsg.text.trim().length < 5) {
+               this.messages.update(msgs => [
+                 ...msgs, 
+                 { 
+                   id: crypto.randomUUID(), 
+                   role: 'system', 
+                   text: this.currentLang() === 'ar' ? 'لم يتم إنشاء الصورة. قد يكون الوصف مخالفاً لسياسات المحتوى أو غير واضح.' : 'Image was not generated. The description might be unclear or violate content policies.',
+                   isError: true 
+                 }
+               ]);
+             }
            }
         }
 
@@ -1154,35 +1159,39 @@ export class AppComponent implements OnInit {
         // Upload generated images to Firebase Storage if any
         const user = this.authService.user();
         if (user) {
-          let lastModelMessage: ChatMessage | undefined;
-          const currentMessages = this.messages();
-          for (let i = currentMessages.length - 1; i >= 0; i--) {
-            if (currentMessages[i].role === 'model') {
-              lastModelMessage = currentMessages[i];
-              break;
+          try {
+            let lastModelMessage: ChatMessage | undefined;
+            const currentMessages = this.messages();
+            for (let i = currentMessages.length - 1; i >= 0; i--) {
+              if (currentMessages[i].role === 'model') {
+                lastModelMessage = currentMessages[i];
+                break;
+              }
             }
-          }
 
-          if (lastModelMessage && lastModelMessage.generatedImages && lastModelMessage.generatedImages.length > 0) {
-            const updatedImages = [];
-            for (const img of lastModelMessage.generatedImages) {
-              if (img.url.startsWith('data:')) { // Check if it's a base64 image
-                const result = await this.authService.processAndUploadImage(user.uid, img.url, img.mimeType);
-                if (result.url) {
-                  updatedImages.push({ ...img, url: result.url });
-                } else if (result.localDataUrl) {
-                  updatedImages.push({ ...img, url: result.localDataUrl }); // Keep watermarked original if upload fails
+            if (lastModelMessage && lastModelMessage.generatedImages && lastModelMessage.generatedImages.length > 0) {
+              const updatedImages = [];
+              for (const img of lastModelMessage.generatedImages) {
+                if (img.url.startsWith('data:')) { // Check if it's a base64 image
+                  const result = await this.authService.processAndUploadImage(user.uid, img.url, img.mimeType);
+                  if (result.url) {
+                    updatedImages.push({ ...img, url: result.url });
+                  } else if (result.localDataUrl) {
+                    updatedImages.push({ ...img, url: result.localDataUrl }); // Keep watermarked original if upload fails
+                  } else {
+                    updatedImages.push(img);
+                  }
                 } else {
                   updatedImages.push(img);
                 }
-              } else {
-                updatedImages.push(img);
               }
+              // Update the message with new URLs
+              this.messages.update(msgs => msgs.map(msg => 
+                msg.id === lastModelMessage!.id ? { ...msg, generatedImages: updatedImages } : msg
+              ));
             }
-            // Update the message with new URLs
-            this.messages.update(msgs => msgs.map(msg => 
-              msg.id === lastModelMessage.id ? { ...msg, generatedImages: updatedImages } : msg
-            ));
+          } catch (e) {
+            console.error('Failed to upload generated images', e);
           }
         }
 
@@ -1225,16 +1234,59 @@ export class AppComponent implements OnInit {
       const db = this.authService.db;
       const chatDocRef = doc(db, 'users', user.uid, 'chats', sessionId);
       
+      // Deep clean messages for Firestore
       const cleanMessages = currentMessages.map(msg => {
-        const clean: any = { ...msg };
-        if (clean.fileData) {
-          clean.fileData = { ...clean.fileData };
-          // Remove base64 data to save Firestore space (1MB limit)
-          delete clean.fileData.data;
+        const clean: any = {
+          id: msg.id || crypto.randomUUID(),
+          role: msg.role,
+          text: msg.text || ''
+        };
+
+        if (msg.isError) clean.isError = true;
+        if (msg.isEdited) clean.isEdited = true;
+        if (msg.location) clean.location = JSON.parse(JSON.stringify(msg.location));
+        
+        if (msg.fileData) {
+          clean.fileData = {
+            mimeType: msg.fileData.mimeType,
+            name: msg.fileData.name,
+            url: msg.fileData.url || null
+          };
+          // Explicitly exclude base64 data
         }
-        if (clean.isError === undefined) delete clean.isError;
-        if (clean.generatedFile === undefined) delete clean.generatedFile;
-        return JSON.parse(JSON.stringify(clean));
+
+        if (msg.generatedImages && msg.generatedImages.length > 0) {
+          clean.generatedImages = msg.generatedImages.map(img => {
+            // Check if URL is base64 data to prevent Firestore document size limit errors
+            if (img.url && img.url.startsWith('data:')) {
+              return {
+                url: null, // Do not save base64 to Firestore
+                mimeType: img.mimeType,
+                alt: img.alt || null,
+                isPending: true // Flag to indicate image is pending upload or failed
+              };
+            }
+            return {
+              url: img.url,
+              mimeType: img.mimeType,
+              alt: img.alt || null
+            };
+          });
+        }
+
+        if (msg.functionCall) {
+          clean.functionCall = JSON.parse(JSON.stringify(msg.functionCall));
+        }
+
+        if (msg.functionResponse) {
+          clean.functionResponse = JSON.parse(JSON.stringify(msg.functionResponse));
+        }
+
+        if (msg.generatedFile) {
+          clean.generatedFile = JSON.parse(JSON.stringify(msg.generatedFile));
+        }
+
+        return clean;
       });
 
       await setDoc(chatDocRef, {

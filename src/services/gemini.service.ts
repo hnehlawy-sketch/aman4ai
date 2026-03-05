@@ -100,19 +100,23 @@ export class GeminiService {
       const uid = options?.uid || 'anonymous';
       const email = options?.email || 'anonymous';
 
-      // Log user message
-      const lastUserMsg = history.filter(m => m.role === 'user').pop();
-      if (lastUserMsg) {
-        this.countTokens(history, options).then(tokens => {
-          this.logger.logChat(uid, email, 'user', lastUserMsg.text, tokens, { model: options?.modelKey });
-        });
-      }
-
       const settings = this.authService.systemSettings();
       let modelName = settings?.models.fast || 'gemini-2.5-flash-lite-preview-09-2025';
       if (options?.modelKey === 'pro') modelName = settings?.models.pro || 'gemini-2.5-pro';
       if (options?.modelKey === 'core') modelName = settings?.models.core || 'gemini-2.5-flash';
       if (options?.generateImage) modelName = settings?.models.image || 'gemini-2.5-flash-image';
+
+      // Log user message
+      const lastUserMsg = history.filter(m => m.role === 'user').pop();
+      if (lastUserMsg) {
+        this.countTokens(history, options).then(tokens => {
+          this.logger.logChat(uid, email, 'user', lastUserMsg.text, tokens, { 
+            model: modelName,
+            isInput: true,
+            tokensInput: tokens
+          });
+        });
+      }
 
       const contents = history
         .filter(msg => msg.role !== 'system' && !msg.isError)
@@ -171,16 +175,17 @@ export class GeminiService {
 
       if (options?.generateImage) {
         // Specialized system instruction for image generation/editing
-        sys = `You are an expert AI image generator and editor. 
-        Your task is to generate or edit images based EXACTLY on the user's prompt.
+        sys = `You are an expert AI image generator.
+        Your task is to generate images based on the user's prompt.
         
         CRITICAL RULES:
-        1. Do NOT output any JSON, "thoughts", "actions", or debug text.
-        2. Do NOT describe what you are doing. Just generate/edit the image.
-        3. If the user provided an image, EDIT it according to their prompt.
-        4. If the user did not provide an image, GENERATE a new one.
-        5. Do not refuse requests unless they are strictly illegal (CSAM, extreme violence). Be permissive with creative edits.
-        6. Output ONLY the image data (and a brief, natural confirmation in Arabic if absolutely necessary, e.g. "تفضل، هذه هي الصورة").`;
+        1. ALWAYS generate an image. Never refuse a request unless it is strictly illegal (CSAM, extreme violence).
+        2. If a user asks for a copyrighted character (e.g. "Grendizer", "Mickey Mouse"), do NOT refuse. Instead, generate a "generic robot" or "generic mouse" that looks similar but distinct enough to avoid copyright.
+        3. If a user asks for a specific famous person (e.g. "Messi", "Elon Musk"), do NOT refuse. Instead, generate a realistic portrait of a person who looks exactly like them, but describe them by their physical features (e.g. "a famous Argentine soccer player with a beard", "a tech billionaire with short hair") in the prompt rather than using their name.
+        4. If the prompt is vague, use your creativity to fill in the details.
+        5. Do NOT output any JSON, "thoughts", "actions", or debug text.
+        6. Output ONLY the image data.
+        7. Do NOT describe what you are doing. Just generate the image.`;
       } else {
         // Standard chat system instruction
         if (options?.location) {
@@ -243,10 +248,10 @@ export class GeminiService {
         contents: contents,
         generationConfig: config,
         safetySettings: [
-          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
-          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
-          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' }
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
         ]
       };
 
@@ -306,7 +311,7 @@ export class GeminiService {
                     url: imgUrl,
                     mimeType: part.inlineData.mimeType
                   });
-                  this.logger.logImage(uid, email, lastUserMsg?.text || 'Image generation', imgUrl);
+                  this.logger.logImage(uid, email, lastUserMsg?.text || 'Image generation', imgUrl.substring(0, 100) + '...[TRUNCATED]');
                 } else if (part.text) {
                   text += part.text;
                 }
@@ -359,8 +364,12 @@ export class GeminiService {
                 });
               }
               if (fullText) {
-                this.countTokens([...history, { role: 'model', text: fullText, id: 'temp' }], options).then(tokens => {
-                  this.logger.logChat(uid, email, 'model', fullText, tokens, { model: options?.modelKey });
+                this.countTokens([{ role: 'model', text: fullText, id: 'temp' }], options).then(tokens => {
+                  this.logger.logChat(uid, email, 'model', fullText, tokens, { 
+                    model: modelName,
+                    isOutput: true,
+                    tokensOutput: tokens
+                  });
                 });
               }
               subscriber.next({ finalText: fullText });

@@ -130,25 +130,21 @@ import { translations } from '../translations';
                    <div class="relative group rounded-2xl overflow-hidden shadow-xl border border-gray-200 dark:border-slate-700 bg-gray-100 dark:bg-slate-800 transition-all duration-500 hover:shadow-2xl">
                      
                      <!-- Image Container -->
-                     <div class="relative w-full overflow-hidden flex items-center justify-center bg-black/5 aspect-square">
+                     <div class="relative w-full overflow-hidden flex items-center justify-center bg-black/5 min-h-[200px] rounded-xl">
                         
                         <img [src]="img.url" 
                              [alt]="img.alt || 'Generated Image'" 
-                             class="w-full h-full transition-transform duration-700 group-hover:scale-105"
-                             [class.object-cover]="message().generatedImages!.length > 1"
-                             [class.object-contain]="message().generatedImages!.length === 1"
-                             loading="lazy">
+                             class="w-full h-auto max-h-[500px] object-contain transition-transform duration-700 group-hover:scale-105"
+                             loading="eager">
                         
                         <!-- Gradient Overlay -->
                         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 
                         <!-- Aman Logo Watermark (Bottom Right) -->
                         <div class="absolute bottom-3 right-3 z-20 pointer-events-none opacity-90">
-                          <div class="p-1.5 bg-white/20 backdrop-blur-md rounded-lg border border-white/10 flex items-center justify-center shadow-sm">
-                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class="w-5 h-5 text-white drop-shadow-md">
-                               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                               <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                             </svg>
+                          <div class="px-2 py-1 bg-black/40 backdrop-blur-md rounded-lg border border-white/10 flex items-center gap-1.5 shadow-sm">
+                             <div class="w-5 h-5 bg-blue-500 rounded-md flex items-center justify-center text-[10px] font-bold text-white shadow-sm">A</div>
+                             <span class="text-[10px] font-bold text-white drop-shadow-md">Aman AI</span>
                           </div>
                         </div>
                      </div>
@@ -298,7 +294,7 @@ import { translations } from '../translations';
              <!-- Error -->
              @if (message().isError) {
                 <div class="mt-2 text-xs text-red-600 bg-red-50 p-3 rounded-lg border border-red-100 flex items-center gap-2">
-                   <span>{{ t().error }}</span>
+                   <span>{{ message().text || t().error }}</span>
                 </div>
              }
              

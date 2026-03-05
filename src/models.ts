@@ -76,4 +76,5 @@ export interface SystemSettings {
     free: number;
     pro: number;
   };
+  mapsApiKey?: string;
 }

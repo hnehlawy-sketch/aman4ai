@@ -490,7 +490,7 @@ import { translations } from '../translations';
                               </span>
                               <span class="font-bold truncate max-w-[150px]">{{ log.email }}</span>
                             </div>
-                            <span class="opacity-40 font-mono">{{ log.timestamp?.toDate() | date:'short' }}</span>
+                            <span class="opacity-40 font-mono">{{ formatLogDate(log.timestamp) | date:'short' }}</span>
                           </div>
                           
                           <div class="opacity-70 line-clamp-3 mb-2 font-mono bg-slate-50 dark:bg-slate-800/30 p-2 rounded-lg">
@@ -529,72 +529,81 @@ import { translations } from '../translations';
                 @if (activeTab() === 'reports') {
                   <div class="space-y-6 animate-[fadeIn_0.3s_ease-out]">
                     <div class="flex items-center justify-between">
-                      <h3 class="font-bold text-lg">تقارير استهلاك التوكنات</h3>
+                      <h3 class="font-bold text-lg">تقارير استهلاك النظام</h3>
                       <div class="text-[10px] opacity-50 font-mono">آخر تحديث: {{ lastUpdate | date:'shortTime' }}</div>
                     </div>
 
-                    @if ((tokenReport() | keyvalue).length === 0) {
-                      <div class="p-12 text-center border-2 border-dashed dark:border-slate-800 rounded-[32px] opacity-50">
-                        <div class="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-8 h-8 text-slate-400">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-                          </svg>
-                        </div>
-                        <p class="font-bold">لا توجد بيانات تقارير حالياً</p>
-                        <p class="text-xs mt-1">يتم جمع البيانات من سجلات الاستخدام الأخيرة (آخر 100 عملية)</p>
-                      </div>
-                    } @else {
-                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        @for (type of (tokenReport() | keyvalue); track type.key) {
-                          <div class="p-6 rounded-[32px] bg-white dark:bg-slate-900 border dark:border-slate-800 shadow-sm hover:shadow-md transition-all">
-                            <div class="flex items-center gap-3 mb-4">
-                              <div class="w-10 h-10 rounded-2xl flex items-center justify-center"
-                                   [class.bg-blue-500/10]="type.key === 'chat'"
-                                   [class.text-blue-500]="type.key === 'chat'"
-                                   [class.bg-green-500/10]="type.key === 'image'"
-                                   [class.text-green-500]="type.key === 'image'"
-                                   [class.bg-purple-500/10]="type.key === 'token_usage'"
-                                   [class.text-purple-500]="type.key === 'token_usage'">
-                                <svg *ngIf="type.key === 'chat'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
-                                  <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3h9m-9 3h9m-6.75-12h10.5A2.25 2.25 0 0 1 20.25 4.5v10.5A2.25 2.25 0 0 1 18 17.25h-6.375L7.5 21V17.25H4.5A2.25 2.25 0 0 1 2.25 15V4.5A2.25 2.25 0 0 1 4.5 2.25h3Z" />
-                                </svg>
-                                <svg *ngIf="type.key === 'image'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
-                                  <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                                </svg>
-                                <svg *ngIf="type.key !== 'chat' && type.key !== 'image'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
-                                  <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                                </svg>
-                              </div>
-                              <span class="text-xs font-bold uppercase tracking-wider opacity-60">{{ type.key }}</span>
-                            </div>
-                            <div class="flex items-baseline gap-2">
-                              <span class="text-3xl font-bold">{{ type.value | number }}</span>
-                              <span class="text-[10px] font-bold opacity-30 uppercase">Tokens</span>
-                            </div>
-                          </div>
-                        }
-                      </div>
-
+                    <!-- Summary Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div class="p-6 rounded-[32px] bg-blue-500/5 border border-blue-500/10">
-                        <h4 class="font-bold text-sm mb-4 flex items-center gap-2">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-blue-500">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-                          </svg>
-                          ملخص السجلات
-                        </h4>
-                        <div class="grid grid-cols-2 gap-6">
-                          <div class="space-y-1">
-                            <p class="text-[10px] font-bold opacity-40 uppercase tracking-widest">إجمالي السجلات المحملة</p>
-                            <p class="text-xl font-bold">{{ logs().length }}</p>
-                          </div>
-                          <div class="space-y-1">
-                            <p class="text-[10px] font-bold opacity-40 uppercase tracking-widest">آخر عملية</p>
-                            <p class="text-sm font-bold truncate">{{ logs()[0]?.email || 'N/A' }}</p>
-                            <p class="text-[10px] opacity-40">{{ logs()[0]?.timestamp?.toDate() | date:'short' }}</p>
-                          </div>
-                        </div>
+                        <p class="text-[10px] font-bold opacity-40 uppercase tracking-widest mb-1">إجمالي التوكنات</p>
+                        <p class="text-2xl font-bold">{{ stats().totalTokens | number }}</p>
                       </div>
-                    }
+                      <div class="p-6 rounded-[32px] bg-green-500/5 border border-green-500/10">
+                        <p class="text-[10px] font-bold opacity-40 uppercase tracking-widest mb-1">التكلفة التقديرية (USD)</p>
+                        <p class="text-2xl font-bold text-green-600">$ {{ stats().estimatedCost | number:'1.4-4' }}</p>
+                      </div>
+                      <div class="p-6 rounded-[32px] bg-purple-500/5 border border-purple-500/10">
+                        <p class="text-[10px] font-bold opacity-40 uppercase tracking-widest mb-1">متوسط الاستهلاك/عملية</p>
+                        <p class="text-2xl font-bold">{{ (stats().totalTokens / (logs().length || 1)) | number:'1.0-0' }}</p>
+                      </div>
+                    </div>
+
+                    <!-- Detailed Logs Table -->
+                    <div class="bg-white dark:bg-slate-900 rounded-[32px] border dark:border-slate-800 overflow-hidden shadow-sm">
+                      <div class="overflow-x-auto">
+                        <table class="w-full text-right border-collapse">
+                          <thead>
+                            <tr class="bg-gray-50 dark:bg-slate-800/50 text-[10px] font-bold uppercase tracking-widest opacity-40">
+                              <th class="px-6 py-4">المستخدم</th>
+                              <th class="px-6 py-4">النموذج</th>
+                              <th class="px-6 py-4">الاستهلاك (In/Out)</th>
+                              <th class="px-6 py-4">التكلفة</th>
+                              <th class="px-6 py-4">التوقيت</th>
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y dark:divide-slate-800">
+                            @for (log of logs(); track log.id) {
+                              @if (log.tokens) {
+                                <tr class="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                  <td class="px-6 py-4">
+                                    <div class="flex flex-col">
+                                      <span class="text-xs font-bold">{{ log.email }}</span>
+                                      <span class="text-[9px] opacity-40">{{ log.type }}</span>
+                                    </div>
+                                  </td>
+                                  <td class="px-6 py-4">
+                                    <span class="text-[10px] font-mono bg-gray-100 dark:bg-slate-800 px-2 py-1 rounded-md">
+                                      {{ log.metadata?.model || 'N/A' }}
+                                    </span>
+                                  </td>
+                                  <td class="px-6 py-4">
+                                    <div class="space-y-1.5 w-32">
+                                      <div class="flex justify-between text-[9px] font-bold">
+                                        <span>{{ log.metadata?.tokensInput || log.tokens }} / {{ log.metadata?.tokensOutput || 0 }}</span>
+                                        <span class="opacity-40">{{ log.tokens }}</span>
+                                      </div>
+                                      <div class="h-1.5 w-full bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                        <div class="h-full bg-blue-500 rounded-full" 
+                                             [style.width.%]="(log.tokens / 2000) * 100"></div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td class="px-6 py-4">
+                                    <span class="text-xs font-bold text-green-600">
+                                      $ {{ calculateLogCost(log) | number:'1.5-5' }}
+                                    </span>
+                                  </td>
+                                  <td class="px-6 py-4 text-[10px] opacity-40">
+                                    {{ formatLogDate(log.timestamp) | date:'shortTime' }}
+                                  </td>
+                                </tr>
+                              }
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
                 }
 
@@ -644,6 +653,14 @@ import { translations } from '../translations';
                           <label class="text-[10px] font-bold opacity-40 uppercase tracking-widest">خطة برو (Pro)</label>
                           <input type="number" [(ngModel)]="editableSettings.limits.pro" class="w-full text-sm bg-gray-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-transparent focus:border-blue-500/50 outline-none transition-all">
                         </div>
+                      </div>
+                    </div>
+
+                    <div class="p-6 rounded-[32px] bg-white dark:bg-slate-900 border dark:border-slate-800 shadow-sm">
+                      <h4 class="font-bold text-sm mb-4">إعدادات الخرائط</h4>
+                      <div class="space-y-1.5">
+                        <label class="text-[10px] font-bold opacity-40 uppercase tracking-widest">Google Maps API Key</label>
+                        <input type="text" [(ngModel)]="editableSettings.mapsApiKey" placeholder="أدخل مفتاح Google Maps هنا" class="w-full text-sm bg-gray-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-transparent focus:border-blue-500/50 outline-none transition-all font-mono">
                       </div>
                     </div>
 
@@ -757,13 +774,45 @@ export class AdminPanelComponent implements OnInit {
 
   stats = computed(() => {
     const all = this.users();
+    const logs = this.logs();
+    const totalTokens = logs.reduce((acc, log) => acc + (log.tokens || 0), 0);
+    
+    // Calculate estimated cost
+    let estimatedCost = 0;
+    logs.forEach(log => {
+      estimatedCost += this.calculateLogCost(log);
+    });
+
     return {
       total: all.length,
       premium: all.filter(u => u.isPremium).length,
       suspended: all.filter(u => u.isSuspended).length,
-      pendingRequests: this.requests().length
+      pendingRequests: this.requests().length,
+      totalTokens,
+      estimatedCost
     };
   });
+
+  calculateLogCost(log: LogEntry): number {
+    if (!log.tokens) return 0;
+    const model = log.metadata?.model || '';
+    const isPro = model.includes('pro');
+    const isFlash = model.includes('flash');
+    
+    // Rates per 1M tokens
+    const rates = {
+      pro: { input: 1.25, output: 5.0 },
+      flash: { input: 0.1, output: 0.4 },
+      default: { input: 0.1, output: 0.4 }
+    };
+
+    const rate = isPro ? rates.pro : (isFlash ? rates.flash : rates.default);
+    
+    const inputTokens = log.metadata?.tokensInput || (log.metadata?.isInput ? log.tokens : log.tokens * 0.7); // Estimate if not split
+    const outputTokens = log.metadata?.tokensOutput || (log.metadata?.isOutput ? log.tokens : log.tokens * 0.3);
+
+    return (inputTokens * rate.input / 1000000) + (outputTokens * rate.output / 1000000);
+  }
 
   filteredUsers = computed(() => {
     const search = this.userSearch().toLowerCase();
@@ -935,5 +984,13 @@ export class AdminPanelComponent implements OnInit {
     } finally {
       this.isSavingSettings.set(false);
     }
+  }
+
+  formatLogDate(timestamp: any): Date | null {
+    if (!timestamp) return null;
+    if (typeof timestamp.toDate === 'function') return timestamp.toDate();
+    if (timestamp instanceof Date) return timestamp;
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') return new Date(timestamp);
+    return null;
   }
 }
