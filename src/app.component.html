@@ -441,22 +441,45 @@
             
             <!-- Loading Content -->
             @if (generateImage()) {
-              <!-- Image Generation Placeholder (Gemini Style) -->
-              <div class="w-full max-w-md aspect-square rounded-2xl border-2 border-dashed border-blue-200 dark:border-blue-900/50 bg-blue-50/30 dark:bg-blue-900/10 flex flex-col items-center justify-center gap-4 animate-pulse overflow-hidden relative">
-                <div class="absolute inset-0 bg-gradient-to-tr from-blue-500/5 to-transparent"></div>
-                <div class="p-4 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-500 relative z-10">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                  </svg>
-                </div>
-                <div class="flex flex-col items-center gap-1 relative z-10">
-                  <span class="text-sm font-bold text-blue-600/80">{{ t().generatingImage || 'جاري إنشاء الصورة...' }}</span>
-                  <div class="flex gap-1 mt-1">
-                    <div class="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                    <div class="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                    <div class="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></div>
+              <!-- Image Generation Placeholder (Aesthetic) -->
+              <div class="w-full max-w-md aspect-square rounded-3xl relative overflow-hidden shadow-2xl animate-pulse group">
+                <!-- Animated Gradient Background -->
+                <div class="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 animate-gradient-xy"></div>
+                
+                <!-- Glassmorphism Container -->
+                <div class="absolute inset-0 backdrop-blur-sm flex flex-col items-center justify-center gap-6 p-6">
+                  
+                  <!-- Floating Icon -->
+                  <div class="relative">
+                    <div class="absolute inset-0 bg-blue-500 blur-2xl opacity-20 animate-pulse"></div>
+                    <div class="w-20 h-20 rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-white/50 dark:border-white/10 shadow-xl flex items-center justify-center relative z-10 animate-bounce-slow">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="url(#paintGradient)" class="w-10 h-10">
+                        <defs>
+                          <linearGradient id="paintGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#3b82f6" />
+                            <stop offset="100%" stop-color="#a855f7" />
+                          </linearGradient>
+                        </defs>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09l2.846.813-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <!-- Text & Loading Dots -->
+                  <div class="flex flex-col items-center gap-2 relative z-10">
+                    <h3 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">
+                      {{ t().generatingImage || 'جاري رسم خيالك...' }}
+                    </h3>
+                    <div class="flex gap-1.5">
+                      <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                      <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                      <div class="w-2 h-2 bg-pink-500 rounded-full animate-bounce"></div>
+                    </div>
                   </div>
                 </div>
+                
+                <!-- Border Gradient -->
+                <div class="absolute inset-0 border-2 border-transparent rounded-3xl [background:linear-gradient(45deg,#3b82f6,#a855f7)_border-box] [mask:linear-gradient(#fff_0_0)_padding-box,linear-gradient(#fff_0_0)] [-webkit-mask-composite:destination-out] mask-composite:exclude opacity-50"></div>
               </div>
             } @else {
               <!-- Glowing Wave Logo Loading -->

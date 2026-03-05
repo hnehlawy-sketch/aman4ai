@@ -1057,7 +1057,8 @@ export class AppComponent implements OnInit {
     this.scrollToBottom();
 
     // Add a placeholder for the model's response immediately
-    this.messages.update(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: '' }]);
+    const placeholderImages = useImageModel ? [{ url: null, mimeType: 'image/png', isPending: true }] : undefined;
+    this.messages.update(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: '', generatedImages: placeholderImages }]);
 
     const currentHistory = this.messages(); // Get the updated history including the placeholder
 
@@ -1099,11 +1100,20 @@ export class AppComponent implements OnInit {
           if (lastModelIdx !== -1) {
             const currentMsg = newMsgs[lastModelIdx];
             let updatedMsg = { ...currentMsg };
+            
             if (response.textChunk !== undefined) {
               updatedMsg.text = (updatedMsg.text || '') + response.textChunk;
             } else if (response.finalText !== undefined) {
               updatedMsg.text = response.finalText;
             }
+            
+            // Handle Policy Errors explicitly
+            if (updatedMsg.text && updatedMsg.text.includes('ERROR_POLICY:')) {
+               updatedMsg.isError = true;
+               updatedMsg.text = updatedMsg.text.replace('ERROR_POLICY:', '').trim();
+               updatedMsg.generatedImages = undefined; // Clear pending image
+            }
+
             if (response.images) {
               updatedMsg.generatedImages = response.images;
             }
@@ -1153,7 +1163,6 @@ export class AppComponent implements OnInit {
            }
         }
 
-        // this.generateImage.set(false); // REMOVED: Keep tool enabled as requested
         this.scrollToBottom();
 
         // Upload generated images to Firebase Storage if any
@@ -1172,17 +1181,24 @@ export class AppComponent implements OnInit {
             if (lastModelMessage && lastModelMessage.generatedImages && lastModelMessage.generatedImages.length > 0) {
               const updatedImages = [];
               for (const img of lastModelMessage.generatedImages) {
-                if (img.url.startsWith('data:')) { // Check if it's a base64 image
-                  const result = await this.authService.processAndUploadImage(user.uid, img.url, img.mimeType);
-                  if (result.url) {
-                    updatedImages.push({ ...img, url: result.url });
-                  } else if (result.localDataUrl) {
-                    updatedImages.push({ ...img, url: result.localDataUrl }); // Keep watermarked original if upload fails
-                  } else {
-                    updatedImages.push(img);
+                // Fix: Add null check for img.url
+                if (img.url && img.url.startsWith('data:')) { // Check if it's a base64 image
+                  try {
+                    const result = await this.authService.processAndUploadImage(user.uid, img.url, img.mimeType);
+                    if (result.url) {
+                      updatedImages.push({ ...img, url: result.url, isPending: false });
+                    } else if (result.localDataUrl) {
+                      updatedImages.push({ ...img, url: result.localDataUrl, isPending: false }); // Keep watermarked original if upload fails
+                    } else {
+                      updatedImages.push({ ...img, isPending: false });
+                    }
+                  } catch (uploadErr) {
+                    console.error('Image upload failed:', uploadErr);
+                    updatedImages.push({ ...img, isPending: false });
                   }
                 } else {
-                  updatedImages.push(img);
+                  // If it's already a URL or null (but not data:), just keep it but clear pending if it was
+                  updatedImages.push({ ...img, isPending: false });
                 }
               }
               // Update the message with new URLs
@@ -1191,10 +1207,9 @@ export class AppComponent implements OnInit {
               ));
             }
           } catch (e) {
-            console.error('Failed to upload generated images', e);
+            console.error('Failed to process generated images:', e);
           }
         }
-
         this.syncChatToFirestore();
       }
     });
