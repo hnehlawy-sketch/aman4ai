@@ -831,7 +831,7 @@
   @if (uiService.liveViewOpen()) {
     <app-live-chat
       [t]="t()"
-      [messagesSignal]="messages">
+      [(messages)]="messages">
     </app-live-chat>
   }
 

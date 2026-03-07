@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild, inject, signal, input, WritableSignal, OnDestroy } from '@angular/core';
+import { Component, ElementRef, ViewChild, inject, signal, input, model, WritableSignal, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { GeminiService, ChatMessage } from '../services/gemini.service';
@@ -173,7 +173,7 @@ export class LiveChatComponent implements OnDestroy {
   private logger = inject(DataLoggingService);
 
   t = input<any>(translations.ar);
-  messagesSignal = input<WritableSignal<ChatMessage[]>>(signal([]) as any);
+  messages = model<ChatMessage[]>([]);
   
   liveState = signal<'idle' | 'connecting' | 'listening' | 'speaking' | 'error'>('idle');
   liveInterimTranscript = signal('');
@@ -380,50 +380,62 @@ export class LiveChatComponent implements OnDestroy {
   }
 
   handleLiveMessage(msg: any) {
-    console.log('[LiveChat] Received message:', msg);
+    console.log('[LiveChat] Received message:', JSON.stringify(msg, null, 2));
     
-    // Handle transcriptions from Model
-    if (msg.serverContent?.modelTurn?.parts) {
-      // If we have pending user text, commit it now as the model is starting to respond
-      if (this.currentUserText.trim()) {
-        console.log('[LiveChat] Committing user text as model started speaking');
-        this.liveFinalTranscript.set(this.currentUserText.trim());
-        this.addMessageToHistory('user', this.currentUserText.trim());
-        this.currentUserText = '';
+    // Handle transcriptions
+    if (msg.inputTranscription) {
+      this.liveInterimTranscript.set(msg.inputTranscription.data);
+      if (msg.inputTranscription.final) {
+        this.addMessageToHistory('user', msg.inputTranscription.data);
         this.liveInterimTranscript.set('');
       }
+    }
 
+    if (msg.outputTranscription) {
+      this.liveInterimTranscript.set(msg.outputTranscription.data);
+      if (msg.outputTranscription.final) {
+        this.addMessageToHistory('model', msg.outputTranscription.data);
+        this.liveInterimTranscript.set('');
+      }
+    }
+
+    // Handle audio output and direct text parts
+    if (msg.serverContent?.modelTurn?.parts) {
+      let text = '';
       for (const part of msg.serverContent.modelTurn.parts) {
-        if (part.text) {
-          // This is the transcription of what the model is saying
-          this.liveInterimTranscript.set(part.text);
-          this.currentModelText += part.text;
-        }
+        if (part.text) text += part.text;
         if (part.inlineData?.data) {
           this.playAudioChunk(part.inlineData.data);
         }
       }
+      if (text) {
+        this.currentModelText += text;
+        this.liveInterimTranscript.set(this.currentModelText);
+      }
     }
 
-    // Handle transcriptions from User (Input Audio Transcription)
     if (msg.serverContent?.userTurn?.parts) {
-      // If we have pending model text, commit it now as the user is starting to speak
+      let text = '';
+      for (const part of msg.serverContent.userTurn.parts) {
+        if (part.text) text += part.text;
+      }
+      if (text) {
+        this.currentUserText += text;
+        this.liveInterimTranscript.set(this.currentUserText);
+      }
+    }
+
+    // Handle turn completion
+    if (msg.serverContent?.turnComplete) {
+      if (this.currentUserText.trim()) {
+        this.addMessageToHistory('user', this.currentUserText.trim());
+        this.currentUserText = '';
+      }
       if (this.currentModelText.trim()) {
-        console.log('[LiveChat] Committing model text as user started speaking');
         this.addMessageToHistory('model', this.currentModelText.trim());
         this.currentModelText = '';
-        this.liveInterimTranscript.set('');
       }
-
-      for (const part of msg.serverContent.userTurn.parts) {
-        if (part.text) {
-          // If it's a user turn, we show it as interim until it's "final"
-          // In this SDK, we might not get a clear "final" flag, so we treat it as interim
-          // and then commit it when the model starts responding or after a timeout.
-          this.liveInterimTranscript.set(part.text);
-          this.currentUserText = part.text;
-        }
-      }
+      this.liveInterimTranscript.set('');
     }
 
     // Handle tool calls
@@ -434,20 +446,11 @@ export class LiveChatComponent implements OnDestroy {
       }
     }
 
-    // Handle turn completion (Model finished)
-    if (msg.serverContent?.turnComplete) {
-       if (this.currentModelText.trim()) {
-         this.addMessageToHistory('model', this.currentModelText.trim());
-         this.currentModelText = '';
-         this.liveInterimTranscript.set('');
-       }
-    }
-
     // Handle interruptions
     if (msg.serverContent?.interrupted) {
       if (this.currentModelText.trim()) {
-         this.addMessageToHistory('model', this.currentModelText.trim() + ' [تمت المقاطعة]');
-         this.currentModelText = '';
+        this.addMessageToHistory('model', this.currentModelText.trim() + ' [تمت المقاطعة]');
+        this.currentModelText = '';
       }
       this.interruptAISpeech();
     }
@@ -465,6 +468,8 @@ export class LiveChatComponent implements OnDestroy {
       toastMessage = 'جاري تحضير الصورة...';
       isCustomTool = true;
       
+      console.log('[LiveChat] Generating image for prompt:', args.prompt);
+
       // Execute image generation in background
       this.geminiService.sendMessage([{ id: crypto.randomUUID(), role: 'user', text: args.prompt }], this.authService.userPlan(), undefined, {
         generateImage: true,
@@ -473,10 +478,20 @@ export class LiveChatComponent implements OnDestroy {
         email: this.authService.user()?.email || ''
       }).subscribe({
         next: (res) => {
+          console.log('[LiveChat] Image generation response:', res);
           if (res.images && res.images.length > 0) {
-            this.visualContent.set({ type: 'image', data: res.images[0].url });
-            this.addMessageToHistory('model', `[تم توليد الصورة: ${args.prompt}]`);
+            console.log('[LiveChat] Image generated successfully:', res.images[0].url);
+            const imageUrl = res.images[0].url;
+            this.visualContent.set({ type: 'image', data: imageUrl });
+            this.addMessageToHistory('model', `[تم توليد الصورة: ${args.prompt}]`, [{ url: imageUrl, mimeType: 'image/png' }]);
+          } else {
+            console.warn('[LiveChat] Image generation failed: No images returned');
+            this.uiService.showToast('فشل توليد الصورة', 'error');
           }
+        },
+        error: (err) => {
+          console.error('[LiveChat] Image generation error:', err);
+          this.uiService.showToast('حدث خطأ أثناء توليد الصورة', 'error');
         }
       });
 
@@ -528,9 +543,9 @@ export class LiveChatComponent implements OnDestroy {
     }
   }
 
-  private addMessageToHistory(role: 'user' | 'model', text: string) {
+  private addMessageToHistory(role: 'user' | 'model', text: string, images?: { url: string | null, mimeType: string }[]) {
     try {
-      if (!text.trim()) return;
+      if (!text.trim() && (!images || images.length === 0)) return;
       console.log(`[LiveChat] Committing message to history: ${role} - ${text.substring(0, 30)}...`);
       const user = this.authService.user();
       if (user) {
@@ -538,16 +553,17 @@ export class LiveChatComponent implements OnDestroy {
           uid: user.uid,
           email: user.email || '',
           type: 'chat',
-          content: { role, text, mode: 'live' }
+          content: { role, text, mode: 'live', hasImages: !!images }
         });
       }
-      this.messagesSignal().update(msgs => {
+      this.messages.update(msgs => {
         const newMsgs = [
           ...msgs,
           {
             id: crypto.randomUUID(),
             role: role,
-            text: text
+            text: text,
+            generatedImages: images
           }
         ];
         console.log(`[LiveChat] Signal updated, new length: ${newMsgs.length}`);

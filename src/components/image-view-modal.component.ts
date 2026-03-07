@@ -50,7 +50,7 @@ export class ImageViewModalComponent {
   download() {
     const url = this.uiService.selectedImageUrl();
     if (url) {
-      this.imageService.downloadImageWithWatermark(url, `aman-ai-image-${Date.now()}.png`);
+      this.imageService.downloadImage(url, `aman-ai-image-${Date.now()}.png`);
     }
   }
 }

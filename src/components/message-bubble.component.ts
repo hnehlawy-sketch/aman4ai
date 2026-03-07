@@ -680,7 +680,7 @@ export class MessageBubbleComponent {
   }
 
   downloadImage(url: string) {
-    this.imageService.downloadImageWithWatermark(url, `aman-ai-image-${Date.now()}.png`);
+    this.imageService.downloadImage(url, `aman-ai-image-${Date.now()}.png`);
   }
 
   openInMaps(lat: number, lng: number, viewOnly: boolean = false) {
