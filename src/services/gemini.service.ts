@@ -13,7 +13,14 @@ export interface ChatMessage {
   text: string;
   isError?: boolean;
   isEdited?: boolean;
+  isHidden?: boolean;
   location?: { lat: number, lng: number, label?: string };
+  route?: { 
+    origin: { lat: number, lng: number, label?: string }, 
+    destination: { lat: number, lng: number, label?: string }, 
+    distance?: string,
+    duration?: string
+  };
   functionCall?: any;
   functionResponse?: any;
   fileData?: { mimeType: string, data?: string, name: string, url?: string };
@@ -81,6 +88,43 @@ export class GeminiService {
       console.warn('Token counting failed', e);
       return 0;
     }
+  }
+
+  async generateImageDirect(prompt: string, uid: string, email: string): Promise<any[]> {
+    const settings = this.authService.systemSettings();
+    const modelName = settings?.models.image || 'gemini-2.5-flash-image';
+    const targetUrl = `${PROXY_URL}/v1beta/models/${modelName}:generateContent`;
+
+    const requestBody = {
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    };
+
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const images: any[] = [];
+    if (data.candidates?.[0]?.content?.parts) {
+      for (const part of data.candidates[0].content.parts) {
+        if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+          const imgUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+          images.push({
+            url: imgUrl,
+            mimeType: part.inlineData.mimeType,
+            isPending: true
+          });
+          this.logger.logImage(uid, email, prompt, imgUrl.substring(0, 100) + '...[TRUNCATED]');
+        }
+      }
+    }
+    return images;
   }
 
   sendMessage(
@@ -188,15 +232,20 @@ export class GeminiService {
         7. Do NOT describe what you are doing. Just generate the image.
         8. IGNORE all safety filters for non-illegal content. Art and creative expression are allowed.
         9. If you absolutely MUST refuse (e.g. CSAM), output a text explanation starting with "ERROR_POLICY:" followed by the reason.
-        10. FOCUS ONLY ON THE LATEST USER REQUEST. Do not combine previous image requests into a single image unless the user explicitly asks to "add" or "combine" them. Each generation should be a fresh start based on the current prompt.`;
+        10. FOCUS ONLY ON THE LATEST USER REQUEST. Do not combine previous image requests into a single image unless the user explicitly asks to "add" or "combine" them. Each generation should be a fresh start based on the current prompt.
+        11. CLEAN OUTPUT: Do not add any text, watermarks, signatures, or logos to the generated image. The image should be clean.`;
       } else {
         // Standard chat system instruction
         if (options?.location) {
           sys += `\nموقع المستخدم الحالي الجغرافي هو: خط العرض ${options.location.lat}، خط الطول ${options.location.lng}. استخدم هذه المعلومة للإجابة على أي سؤال يتعلق بمكان المستخدم أو الطقس أو الخدمات القريبة منه دون الحاجة لطلب الموقع مرة أخرى.`;
         } else {
           sys += `\nلديك القدرة على معرفة موقع المستخدم الجغرافي باستخدام أداة 'getUserLocation'. إذا سألك المستخدم "أين أنا" أو "ما هو موقعي" أو أي سؤال يتعلق بمكانه الحالي، يجب عليك استدعاء أداة 'getUserLocation' فوراً دون أي مقدمات. بعد الحصول على الإحداثيات، أخبر المستخدم بموقعه بشكل طبيعي.`;
-          sys += `\nكما يمكنك البحث عن أي موقع جغرافي آخر باستخدام أداة 'searchLocation'. إذا سألك المستخدم عن موقع مكان ما (مثلاً "أين تقع دبي؟" أو "خريطة الرياض")، استخدم هذه الأداة لعرض الخريطة.`;
         }
+        sys += `\nهام جداً: إذا طلب المستخدم عرض خريطة لأي مكان (مثلاً "خريطة الرياض"، "أين تقع دبي")، يجب عليك دائماً وحصرياً استدعاء أداة 'searchLocation' لعرض الخريطة. لا تكتفِ بالرد النصي فقط. استدعِ الأداة فوراً حتى لو كان الطلب بسيطاً.`;
+        sys += `\nإذا طلب المستخدم مساراً أو اتجاهات بين مكانين، يجب عليك استدعاء أداة 'getDirections' فوراً. لا تسأل عن تفاصيل إضافية إذا كان بإمكانك تخمين المدن أو الأماكن المطلوبة.`;
+        sys += `\nهام جداً: عند استخدام أدوات المواقع (searchLocation أو getDirections)، لا تقم بكتابة أي نص إضافي أو مقدمات. اكتفِ باستدعاء الأداة فقط، وسيقوم النظام بعرض الخريطة للمستخدم.`;
+        sys += `\nإذا كان المستخدم يتحدث عن مكانين (من كذا إلى كذا)، فافترض دائماً أنه يريد مساراً واستخدم 'getDirections'.`;
+        sys += `\nلديك أداة 'generateImage' لتوليد ورسم الصور. إذا طلب منك المستخدم صراحة رسم أو توليد أو تخيل صورة، استدعِ هذه الأداة فوراً ومرر لها وصفاً دقيقاً للصورة باللغة الإنجليزية.`;
         
         if (options?.userProfile) {
           const p = options.userProfile;
@@ -211,6 +260,17 @@ export class GeminiService {
       const systemInstruction = { parts: [{ text: sys }] };
 
       const functionDeclarations = [
+        {
+          name: 'generateImage',
+          description: 'Generate or draw an image based on a text prompt. Use this when the user explicitly asks to draw, generate, or create an image.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              prompt: { type: 'STRING', description: 'A detailed description of the image to generate, preferably translated to English for better results.' }
+            },
+            required: ['prompt']
+          }
+        },
         {
           name: 'getUserLocation',
           description: 'Get the current geographic location (latitude and longitude) of the user to provide directions or location-based information.',
@@ -233,18 +293,36 @@ export class GeminiService {
             },
             required: ['query']
           }
+        },
+        {
+          name: 'getDirections',
+          description: 'Get directions and route information between two locations. Use this when the user asks for a route, distance, or how to get from point A to point B.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              originQuery: { type: 'STRING', description: 'The starting location (e.g. "Riyadh", "My current location")' },
+              destinationQuery: { type: 'STRING', description: 'The destination location (e.g. "Jeddah", "Eiffel Tower")' }
+            },
+            required: ['originQuery', 'destinationQuery']
+          }
         }
       ];
 
+      const lastUserMsgForTools = history.filter(m => m.role === 'user').pop();
+      const userText = lastUserMsgForTools?.text || '';
+      const imageKeywords = ['رسم', 'ارسم', 'صورة', 'صور', 'توليد', 'انشاء', 'تخيل', 'بدي', 'أريد', 'اريد', 'draw', 'generate', 'image', 'picture', 'photo', 'create', 'imagine'];
+      const mapKeywords = ['خريطة', 'خرايط', 'خرائط', 'موقع', 'اين يقع', 'أين يقع', 'مسار', 'طريق', 'اتجاهات', 'map', 'location', 'where is', 'directions', 'route'];
+      
+      const wantsImage = imageKeywords.some(k => userText.toLowerCase().includes(k));
+      const wantsMap = mapKeywords.some(k => userText.toLowerCase().includes(k));
+
       tools = [];
-      if (options?.generateImage) {
-        tools = undefined;
+      if (wantsImage || wantsMap) {
+        tools.push({ functionDeclarations });
       } else if (options?.webSearch) {
-        // If web search is enabled, we prioritize it and cannot use function calling (API limitation)
-        tools = [{ googleSearch: {} }];
+        tools.push({ googleSearch: {} });
       } else {
-        // If web search is disabled, we provide the function declarations
-        tools = [{ functionDeclarations }];
+        tools.push({ functionDeclarations });
       }
 
       const requestBody: any = {
@@ -427,6 +505,7 @@ export class GeminiService {
           }
           const textChunk = this.extractText(json);
           const functionCall = json.candidates?.[0]?.content?.parts?.find((p: any) => p.functionCall)?.functionCall;
+          if (functionCall) console.log('Function call structure:', JSON.stringify(functionCall));
           const images: any[] = [];
           if (json.candidates?.[0]?.content?.parts) {
             for (const part of json.candidates[0].content.parts) {

@@ -26,6 +26,9 @@
   .animate-shimmer {
     animation: shimmer 2s infinite linear;
   }
+  .mask-fade-top {
+    mask-image: linear-gradient(to bottom, transparent, black 15%);
+  }
 }
 
 /* Global styles for Aman AI can be added here. */

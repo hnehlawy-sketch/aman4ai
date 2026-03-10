@@ -10,7 +10,6 @@ export class UiService {
   exportModalOpen = signal(false);
   personalizationModalOpen = signal(false);
   liveViewOpen = signal(false);
-  adminPanelOpen = signal(false);
   upgradeModalOpen = signal(false);
   upgradePlan = signal<'pro' | 'premium' | null>(null);
   infoModalOpen = signal(false);
@@ -64,9 +63,6 @@ export class UiService {
 
   openLiveView() { this.liveViewOpen.set(true); }
   closeLiveView() { this.liveViewOpen.set(false); }
-
-  openAdminPanel() { this.adminPanelOpen.set(true); }
-  closeAdminPanel() { this.adminPanelOpen.set(false); }
 
   openUpgradeModal(plan: 'pro' | 'premium') {
     if (!this.authService.user()) {

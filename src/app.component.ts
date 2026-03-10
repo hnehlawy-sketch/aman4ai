@@ -6,10 +6,39 @@ import { FormsModule } from '@angular/forms';
 import { GeminiService, ChatMessage } from './services/gemini.service';
 import { AuthService } from './services/auth.service';
 import { UiService } from './services/ui.service';
+import { ImageService } from './services/image.service';
 import { MessageBubbleComponent } from './components/message-bubble.component';
-import { doc, setDoc, collection, writeBatch, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, writeBatch, getDocs, deleteDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { translations } from './translations';
 import { ChatSession, UserProfile } from './models';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
 
 // Import New Components
 import { AuthModalComponent } from './components/auth-modal.component';
@@ -17,11 +46,15 @@ import { SettingsModalComponent } from './components/settings-modal.component';
 import { ExportModalComponent } from './components/export-modal.component';
 import { PersonalizationModalComponent } from './components/personalization-modal.component';
 import { LiveChatComponent } from './components/live-chat.component';
-import { AdminPanelComponent } from './components/admin-panel.component';
 import { InfoModalComponent } from './components/info-modal.component';
 import { ImageViewModalComponent } from './components/image-view-modal.component';
 import { AccountModalComponent } from './components/account-modal.component';
 import { UpgradeModalComponent } from './components/upgrade-modal.component';
+import { SidebarComponent } from './components/sidebar.component';
+import { HeaderComponent } from './components/header.component';
+import { ChatInputComponent } from './components/chat-input.component';
+import { InstallPromptComponent } from './components/install-prompt.component';
+import { InputModelMenuComponent } from './components/input-model-menu.component';
 
 
 declare var window: any;
@@ -48,11 +81,15 @@ import { DataLoggingService } from './services/data-logging.service';
     ExportModalComponent,
     PersonalizationModalComponent,
     LiveChatComponent,
-    AdminPanelComponent,
     InfoModalComponent,
     ImageViewModalComponent,
     AccountModalComponent,
-    UpgradeModalComponent
+    UpgradeModalComponent,
+    SidebarComponent,
+    HeaderComponent,
+    ChatInputComponent,
+    InstallPromptComponent,
+    InputModelMenuComponent
   ],
   templateUrl: './app.component.html',
   host: {
@@ -63,6 +100,7 @@ export class AppComponent implements OnInit {
   private geminiService = inject(GeminiService);
   public authService = inject(AuthService); 
   public uiService = inject(UiService);
+  public imageService = inject(ImageService);
   public storageService = inject(StorageService);
   private logger = inject(DataLoggingService);
   
@@ -103,6 +141,11 @@ export class AppComponent implements OnInit {
   messages: WritableSignal<ChatMessage[]> = signal([]);
   abortController: AbortController | null = null;
   private messageSubscription: Subscription | null = null;
+  private processedFunctionCalls = new Set<string>();
+  private isSending = false;
+  private sessionUnsubscribe: Unsubscribe | null = null;
+  private chatsUnsubscribe: Unsubscribe | null = null;
+  private isSyncingFromRemote = false;
   
   // -- User Profile State --
   userProfile = signal<UserProfile | null>(null);
@@ -161,8 +204,8 @@ export class AppComponent implements OnInit {
       const id = this.currentSessionId();
       if (id && msgs.length >= 0) {
         this.updateSessionMessages(id, msgs);
-        // Auto-sync to Firestore if user is logged in
-        if (this.authService.user()) {
+        // Auto-sync to Firestore if user is logged in and NOT currently receiving a remote update
+        if (this.authService.user() && !this.isSyncingFromRemote) {
           this.syncChatToFirestore();
         }
       }
@@ -314,6 +357,11 @@ export class AppComponent implements OnInit {
   }
   
   async logout() {
+    if (this.chatsUnsubscribe) {
+      this.chatsUnsubscribe();
+      this.chatsUnsubscribe = null;
+    }
+    this.sessions.set([]);
     await this.authService.logout();
     this.showUserMenu.set(false);
   }
@@ -359,43 +407,85 @@ export class AppComponent implements OnInit {
   }
 
   async loadRemoteSessions(uid: string) {
+    if (this.chatsUnsubscribe) {
+      this.chatsUnsubscribe();
+    }
+
     try {
       const chatsRef = collection(this.authService.db, 'users', uid, 'chats');
-      const snapshot = await getDocs(chatsRef);
-      const remoteSessions: ChatSession[] = [];
       
-      snapshot.forEach(doc => {
-        const data = doc.data() as ChatSession;
-        console.log('Loading remote session data:', data);
-        if (data.id && data.messages) {
-          remoteSessions.push(data);
-        }
-      });
-
-      if (remoteSessions.length > 0) {
-        this.sessions.update(current => {
-          const combined = [...current];
-          remoteSessions.forEach(r => {
-             const idx = combined.findIndex(c => c.id === r.id);
-             if (idx >= 0) {
-               combined[idx] = r; 
-             } else {
-               combined.push(r);
-             }
-          });
-          return combined.sort((a,b) => b.timestamp - a.timestamp);
+      this.chatsUnsubscribe = onSnapshot(chatsRef, (snapshot) => {
+        const remoteSessions: ChatSession[] = [];
+        snapshot.forEach(doc => {
+          const data = doc.data() as ChatSession;
+          if (data.id && data.messages) {
+            remoteSessions.push(data);
+          }
         });
-        
-        if (this.currentSessionId()) {
-          const updated = this.sessions().find(s => s.id === this.currentSessionId());
-          if (updated) {
-            this.messages.set(updated.messages);
+
+        if (remoteSessions.length > 0) {
+          this.sessions.update(current => {
+            const combined = [...current];
+            remoteSessions.forEach(r => {
+              const idx = combined.findIndex(c => c.id === r.id);
+              if (idx >= 0) {
+                combined[idx] = r; 
+              } else {
+                combined.push(r);
+              }
+            });
+            return combined.sort((a,b) => b.timestamp - a.timestamp);
+          });
+          
+          // If the current session was updated remotely, we need to update the local messages signal
+          const activeId = this.currentSessionId();
+          if (activeId) {
+            const updated = remoteSessions.find(s => s.id === activeId);
+            if (updated) {
+              // Compare messages to avoid infinite loops
+              const currentMsgs = JSON.stringify(this.messages());
+              const remoteMsgs = JSON.stringify(updated.messages);
+              
+              if (currentMsgs !== remoteMsgs) {
+                console.log('[AppComponent] Remote update detected for active session');
+                this.isSyncingFromRemote = true;
+                this.messages.set(updated.messages);
+                setTimeout(() => this.isSyncingFromRemote = false, 100);
+              }
+            }
           }
         }
-      }
+      }, (error) => {
+        this.handleFirestoreError(error, OperationType.LIST, `users/${uid}/chats`);
+      });
     } catch (e) {
-      console.error('Error loading remote chats', e);
+      console.error('Error setting up remote chats listener', e);
     }
+  }
+
+  private handleFirestoreError(error: any, operationType: OperationType, path: string | null) {
+    const user = this.authService.user();
+    const errInfo: FirestoreErrorInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      authInfo: {
+        userId: user?.uid,
+        email: user?.email,
+        emailVerified: user?.emailVerified,
+        isAnonymous: user?.isAnonymous,
+        tenantId: user?.tenantId,
+        providerInfo: user?.providerData.map(provider => ({
+          providerId: provider.providerId,
+          displayName: provider.displayName,
+          email: provider.email,
+          photoUrl: provider.photoURL
+        })) || []
+      },
+      operationType,
+      path
+    };
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+    // Optionally show a toast or error boundary update
+    this.uiService.showToast(this.t().error, 'error');
   }
 
   @HostListener('document:click')
@@ -408,6 +498,7 @@ export class AppComponent implements OnInit {
     // We don't add it to this.sessions yet to avoid empty session clutter
     this.currentSessionId.set(newId);
     this.messages.set([]);
+    this.processedFunctionCalls.clear();
     this.inputMessage.set('');
     this.selectedFile.set(null);
     this.geminiService.startNewChat(this.currentLang());
@@ -718,6 +809,109 @@ export class AppComponent implements OnInit {
   }
 
   async handleFunctionCall(call: any) {
+    const callId = call.id || `${call.name}-${JSON.stringify(call.args)}`;
+    if (this.processedFunctionCalls.has(callId)) return;
+    this.processedFunctionCalls.add(callId);
+
+    if (call.name === 'generateImage') {
+      const prompt = call.args.prompt;
+      
+      this.isLoading.set(true);
+      
+      const imageMsgId = crypto.randomUUID();
+      let actualTargetId: string = imageMsgId;
+      
+      this.messages.update(msgs => {
+        const newMsgs = [...msgs];
+        const lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
+        if (lastModelIdx !== -1 && !newMsgs[lastModelIdx].text && !newMsgs[lastModelIdx].generatedImages) {
+          newMsgs[lastModelIdx] = { ...newMsgs[lastModelIdx], generatedImages: [{ url: null, mimeType: 'image/png', isPending: true }] };
+          actualTargetId = newMsgs[lastModelIdx].id;
+        } else {
+          newMsgs.push({ id: imageMsgId, role: 'model', text: '', generatedImages: [{ url: null, mimeType: 'image/png', isPending: true }] });
+        }
+        return newMsgs;
+      });
+      this.syncChatToFirestore();
+
+      try {
+        const user = this.authService.user();
+        const images = await this.geminiService.generateImageDirect(prompt, user?.uid || 'anonymous', user?.email || 'anonymous');
+
+        if (images && images.length > 0) {
+          // Upload images to Firebase Storage immediately
+          const updatedImages = [];
+          if (user) {
+             for (const img of images) {
+                if (img.url && img.url.startsWith('data:')) {
+                   try {
+                      const result = await this.authService.processAndUploadImage(user.uid, img.url, img.mimeType);
+                      if (result.url) {
+                         if (result.blob) {
+                            this.imageService.cacheBlob(result.url, result.blob);
+                         }
+                         updatedImages.push({ ...img, url: result.url, isPending: false });
+                      } else {
+                         updatedImages.push({ ...img, isPending: false });
+                      }
+                   } catch (e) {
+                      updatedImages.push({ ...img, isPending: false });
+                   }
+                } else {
+                   updatedImages.push({ ...img, isPending: false });
+                }
+             }
+          } else {
+             updatedImages.push(...images.map((img: any) => ({ ...img, isPending: false })));
+          }
+
+          this.messages.update(msgs => {
+            const newMsgs = [...msgs];
+            const targetIdx = newMsgs.findIndex(m => m.id === actualTargetId);
+            if (targetIdx !== -1) {
+              newMsgs[targetIdx] = { ...newMsgs[targetIdx], generatedImages: updatedImages };
+            }
+            
+            newMsgs.push({
+              id: crypto.randomUUID(),
+              role: 'user',
+              text: '',
+              isHidden: true,
+              functionResponse: {
+                name: call.name,
+                response: { success: true, message: 'Image generated successfully and shown to the user.' }
+              }
+            });
+            return newMsgs;
+          });
+
+          this.sendFunctionResponse(call.name, { success: true, message: 'Image generated successfully and shown to the user.' });
+          
+        } else {
+          this.messages.update(msgs => {
+            const newMsgs = [...msgs];
+            const targetIdx = newMsgs.findIndex(m => m.id === actualTargetId);
+            if (targetIdx !== -1) {
+              newMsgs[targetIdx] = { ...newMsgs[targetIdx], generatedImages: undefined, text: 'عذراً، لم أتمكن من توليد الصورة.', isError: true };
+            }
+            return newMsgs;
+          });
+          this.sendFunctionResponse(call.name, { error: 'Failed to generate image' });
+        }
+      } catch (err) {
+        this.messages.update(msgs => {
+          const newMsgs = [...msgs];
+          const targetIdx = newMsgs.findIndex(m => m.id === actualTargetId);
+          if (targetIdx !== -1) {
+            newMsgs[targetIdx] = { ...newMsgs[targetIdx], generatedImages: undefined, text: 'حدث خطأ أثناء محاولة رسم الصورة.', isError: true };
+          }
+          return newMsgs;
+        });
+        this.sendFunctionResponse(call.name, { error: 'Error generating image' });
+      }
+      return;
+    }
+
     if (call.name === 'getUserLocation') {
       this.isLoading.set(true);
       const tempId = crypto.randomUUID();
@@ -750,6 +944,7 @@ export class AppComponent implements OnInit {
               id: crypto.randomUUID(),
               role: 'user',
               text: '',
+              isHidden: true,
               functionResponse: {
                 name: call.name,
                 response: { latitude: lat, longitude: lng }
@@ -771,6 +966,7 @@ export class AppComponent implements OnInit {
               id: crypto.randomUUID(),
               role: 'user',
               text: '',
+              isHidden: true,
               functionResponse: {
                 name: call.name,
                 response: { error: errMsg }
@@ -784,20 +980,39 @@ export class AppComponent implements OnInit {
         { timeout: 10000, enableHighAccuracy: true }
       );
     } else if (call.name === 'searchLocation') {
+      console.log('searchLocation called with:', call.args);
       const query = call.args.query;
       this.isLoading.set(true);
       const tempId = crypto.randomUUID();
       this.messages.update(msgs => [...msgs, { id: tempId, role: 'system', text: `جاري البحث عن "${query}"...` }]);
 
       try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
-        const data = await response.json();
+        const apiKey = this.authService.systemSettings()?.mapsApiKey;
+        let lat, lng, label;
 
-        if (data && data.length > 0) {
-          const lat = parseFloat(data[0].lat);
-          const lng = parseFloat(data[0].lon);
-          const label = data[0].display_name.split(',')[0];
+        if (apiKey) {
+          const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`);
+          const data = await res.json();
+          if (data.status === 'OK' && data.results.length > 0) {
+            lat = data.results[0].geometry.location.lat;
+            lng = data.results[0].geometry.location.lng;
+            label = data.results[0].formatted_address.split(',')[0];
+          }
+        }
 
+        if (!lat) {
+          const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`, {
+            headers: { 'User-Agent': 'AmanAI-App/1.0' }
+          });
+          const data = await response.json();
+          if (data && data.length > 0) {
+            lat = parseFloat(data[0].lat);
+            lng = parseFloat(data[0].lon);
+            label = data[0].display_name.split(',')[0];
+          }
+        }
+
+        if (lat && lng) {
           this.messages.update(msgs => msgs.filter(m => m.id !== tempId));
 
           this.messages.update(msgs => {
@@ -813,6 +1028,7 @@ export class AppComponent implements OnInit {
               id: crypto.randomUUID(),
               role: 'user',
               text: '',
+              isHidden: true,
               functionResponse: {
                 name: call.name,
                 response: { latitude: lat, longitude: lng, label }
@@ -830,6 +1046,129 @@ export class AppComponent implements OnInit {
         this.updateSystemMessage(tempId, 'حدث خطأ أثناء البحث عن الموقع');
         this.sendFunctionResponse(call.name, { error: 'Search failed' });
       }
+    } else if (call.name === 'getDirections') {
+      const origin = call.args.originQuery;
+      const dest = call.args.destinationQuery;
+      this.isLoading.set(true);
+      const tempId = crypto.randomUUID();
+      this.messages.update(msgs => [...msgs, { id: tempId, role: 'system', text: `جاري البحث عن المسار من "${origin}" إلى "${dest}"...` }]);
+
+      try {
+        const apiKey = this.authService.systemSettings()?.mapsApiKey;
+        let originLat, originLng, originLabel;
+        if (origin.toLowerCase().includes('current') || origin.includes('حالي') || origin.includes('موقعي')) {
+           const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+             navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000, enableHighAccuracy: true });
+           });
+           originLat = pos.coords.latitude;
+           originLng = pos.coords.longitude;
+           originLabel = 'موقعك الحالي';
+        } else {
+           if (apiKey) {
+             const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(origin)}&key=${apiKey}`);
+             const data = await res.json();
+             if (data.status === 'OK' && data.results.length > 0) {
+               originLat = data.results[0].geometry.location.lat;
+               originLng = data.results[0].geometry.location.lng;
+               originLabel = data.results[0].formatted_address.split(',')[0];
+             }
+           }
+           
+           if (!originLat) {
+             const res1 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(origin)}`, {
+               headers: { 'User-Agent': 'AmanAI-App/1.0' }
+             });
+             const data1 = await res1.json();
+             if (data1 && data1.length > 0) {
+               originLat = parseFloat(data1[0].lat);
+               originLng = parseFloat(data1[0].lon);
+               originLabel = data1[0].display_name.split(',')[0];
+             } else {
+               throw new Error(`Origin not found: ${origin}`);
+             }
+           }
+        }
+
+        let destLat, destLng, destLabel;
+        if (apiKey) {
+          const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(dest)}&key=${apiKey}`);
+          const data = await res.json();
+          if (data.status === 'OK' && data.results.length > 0) {
+            destLat = data.results[0].geometry.location.lat;
+            destLng = data.results[0].geometry.location.lng;
+            destLabel = data.results[0].formatted_address.split(',')[0];
+          }
+        }
+
+        if (!destLat) {
+          const res2 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(dest)}`, {
+            headers: { 'User-Agent': 'AmanAI-App/1.0' }
+          });
+          const data2 = await res2.json();
+          if (data2 && data2.length > 0) {
+             destLat = parseFloat(data2[0].lat);
+             destLng = parseFloat(data2[0].lon);
+             destLabel = data2[0].display_name.split(',')[0];
+          } else {
+             throw new Error(`Destination not found: ${dest}`);
+          }
+        }
+
+        let distanceText = '';
+        let durationText = '';
+        try {
+           const osrmRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destLng},${destLat}?overview=false`, {
+             headers: { 'User-Agent': 'AmanAI-App/1.0' }
+           });
+           const osrmData = await osrmRes.json();
+           if (osrmData && osrmData.routes && osrmData.routes.length > 0) {
+              const distanceKm = (osrmData.routes[0].distance / 1000).toFixed(1);
+              const durationMin = Math.round(osrmData.routes[0].duration / 60);
+              distanceText = `${distanceKm} كم`;
+              durationText = `${durationMin} دقيقة`;
+           }
+        } catch (e) {
+           console.error('Failed to fetch route distance', e);
+        }
+
+        this.messages.update(msgs => msgs.filter(m => m.id !== tempId));
+
+        this.messages.update(msgs => {
+          const newMsgs = [...msgs];
+          const lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
+          const routeData = {
+             origin: { lat: originLat, lng: originLng, label: originLabel },
+             destination: { lat: destLat, lng: destLng, label: destLabel },
+             distance: distanceText,
+             duration: durationText
+          };
+          if (lastModelIdx !== -1) {
+            newMsgs[lastModelIdx] = { ...newMsgs[lastModelIdx], route: routeData };
+          } else {
+            newMsgs.push({ id: crypto.randomUUID(), role: 'model', text: '', route: routeData });
+          }
+          
+          newMsgs.push({
+            id: crypto.randomUUID(),
+            role: 'user',
+            text: '',
+            isHidden: true,
+            functionResponse: {
+              name: call.name,
+              response: { success: true, origin: routeData.origin, destination: routeData.destination, distance: distanceText, duration: durationText }
+            }
+          });
+          return newMsgs;
+        });
+
+        this.sendFunctionResponse(call.name, { success: true, origin: { lat: originLat, lng: originLng }, destination: { lat: destLat, lng: destLng }, distance: distanceText, duration: durationText });
+      } catch (err: any) {
+        let errorMsg = 'حدث خطأ أثناء البحث عن المسار';
+        if (err.message?.includes('Origin not found')) errorMsg = `لم يتم العثور على نقطة الانطلاق: ${origin}`;
+        if (err.message?.includes('Destination not found')) errorMsg = `لم يتم العثور على وجهة الوصول: ${dest}`;
+        this.updateSystemMessage(tempId, errorMsg);
+        this.sendFunctionResponse(call.name, { error: err.message || 'Route search failed' });
+      }
     }
   }
 
@@ -838,15 +1177,10 @@ export class AppComponent implements OnInit {
   }
 
   async sendFunctionResponse(name: string, response: any) {
-    
-    // We need to add the function call and response to the history
-    // The Gemini API expects:
-    // 1. A message with role 'model' containing the functionCall
-    // 2. A message with role 'function' or similar containing the response
-    
-    // In our simplified ChatMessage, we'll just add a hidden message or handle it in GeminiService
-    // Actually, let's update GeminiService to accept tool responses
-    
+    let receivedFunctionCall = false;
+
+    this.messages.update(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: '' }]);
+
     this.messageSubscription = this.geminiService.sendMessage(
       this.messages(),
       this.authService.userPlan(),
@@ -862,6 +1196,21 @@ export class AppComponent implements OnInit {
       }
     ).subscribe({
       next: (res) => {
+        if (res.functionCall) {
+          receivedFunctionCall = true;
+          this.messages.update(msgs => {
+            const newMsgs = [...msgs];
+            const lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
+            if (lastModelIdx !== -1) {
+              newMsgs[lastModelIdx] = { ...newMsgs[lastModelIdx], functionCall: res.functionCall };
+            }
+            return newMsgs;
+          });
+          this.syncChatToFirestore();
+          this.handleFunctionCall(res.functionCall);
+          return;
+        }
+        
         this.messages.update(msgs => {
           const newMsgs = [...msgs];
           const lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
@@ -884,7 +1233,9 @@ export class AppComponent implements OnInit {
         this.syncChatToFirestore();
       },
       complete: () => {
+        if (receivedFunctionCall) return;
         this.isLoading.set(false);
+        this.generateImage.set(false); // Reset after tool response
         this.scrollToBottom();
         this.syncChatToFirestore();
       }
@@ -893,9 +1244,13 @@ export class AppComponent implements OnInit {
 
   async sendMessage() {
     console.log('sendMessage called');
+    if (this.isSending) return;
+    this.isSending = true;
+
     if (!this.authService.user()) {
       console.log('User not logged in, opening auth modal');
       this.uiService.openAuthModal();
+      this.isSending = false;
       return;
     }
 
@@ -903,8 +1258,16 @@ export class AppComponent implements OnInit {
     const file = this.selectedFile();
     if ((!text && !file) || this.isLoading()) {
       console.log('Message is empty or loading is true. text:', text, 'file:', file, 'isLoading:', this.isLoading());
+      this.isSending = false;
       return;
     }
+
+    // Clear input and show loading immediately for better UX
+    this.inputMessage.set('');
+    this.selectedFile.set(null);
+    this.isLoading.set(true);
+    if (this.textarea?.nativeElement) this.textarea.nativeElement.style.height = 'auto';
+    this.scrollToBottom();
 
     // Auto-detect intent based on keywords
     const textLower = text.toLowerCase();
@@ -927,51 +1290,17 @@ export class AppComponent implements OnInit {
         console.warn('Could not pre-fetch location:', err);
       }
 
-    // Auto-detect intent based on keywords
-    // const textLower = text.toLowerCase(); // Already declared above
-
-    // 1. Image Generation Keywords
-    const imageKeywords = [
-      'رسم', 'ارسم', 'صورة', 'صور', 'توليد', 'انشاء', 'تخيل', 'عدل', 'غير', 'لون', 'لبس', 'خلفية', 'صمم', 'ابدع', 'فنان', 'لوحة', 'بورتريه', 'كرتون', 'انمي', 'واقعية', 'جودة عالية', '4k', 'hd', 'شعار', 'لوغو',
-      'draw', 'generate', 'image', 'picture', 'photo', 'create', 'imagine', 'edit', 'change', 'modify', 'background', 'wear', 'clothes', 'design', 'paint', 'portrait', 'cartoon', 'anime', 'realistic', 'render', 'artwork', 'sketch', 'illustration', 'logo'
-    ];
-
-    // 2. Map/Location Keywords
-    const mapKeywords = [
-      'خريطة', 'خرائط', 'موقع', 'مكان', 'وين', 'اين', 'أين', 'مسافة', 'اتجاهات', 'طريق', 'شارع', 'مدينة', 'دولة', 'عاصمة', 'مطعم', 'فندق', 'مستشفى', 'صيدلية', 'قريب', 'جي بي اس', 'لوكيشن',
-      'map', 'maps', 'location', 'place', 'where', 'distance', 'directions', 'route', 'street', 'city', 'country', 'capital', 'restaurant', 'hotel', 'hospital', 'pharmacy', 'near', 'nearby', 'gps', 'navigation'
-    ];
-
-    // 3. Web Search Keywords
-    const searchKeywords = [
-      'بحث', 'ابحث', 'دور', 'طالع', 'شوف', 'جوجل', 'معلومات', 'اخبار', 'طقس', 'سعر', 'عملة', 'دولار', 'يورو', 'ذهب', 'رياضة', 'مباراة', 'نتيجة', 'من هو', 'متى', 'لماذا', 'كيف', 'حدث', 'جديد',
-      'search', 'find', 'google', 'look up', 'info', 'information', 'news', 'weather', 'price', 'currency', 'dollar', 'euro', 'gold', 'sport', 'match', 'score', 'who is', 'when', 'why', 'how', 'latest', 'recent', 'event'
-    ];
-    
-    // Check intents
-    const isImageIntent = imageKeywords.some(k => textLower.includes(k));
-    const isMapIntent = mapKeywords.some(k => textLower.includes(k));
-    const isSearchIntent = searchKeywords.some(k => textLower.includes(k));
-    
-    // Determine final mode
+    // Determine final mode based on explicit UI toggles
     let useImageModel = this.generateImage();
     let useWebSearch = this.useWebSearch();
-
-    if (isImageIntent) {
-      console.log('Auto-switching to Image Mode');
-      useImageModel = true;
-      useWebSearch = false; // Disable web search for image generation
-      this.generateImage.set(true);
-    } else if (isMapIntent) {
-      console.log('Auto-switching to Map Mode (Tools Enabled)');
-      useImageModel = false;
-      useWebSearch = false; // Disable web search to enable Map Tools (function calling)
-      // We don't change the UI toggle for web search necessarily, but we override the request
-    } else if (isSearchIntent) {
-      console.log('Auto-switching to Web Search Mode');
-      useImageModel = false;
-      useWebSearch = true;
+    
+    // If image generation is requested, disable web search to avoid tool conflict
+    if (useImageModel) {
+      useWebSearch = false;
     }
+    
+    // Reset the image toggle for the NEXT message so it doesn't stick
+    this.generateImage.set(false);
 
     const isPremium = this.authService.isPremium();
     
@@ -1010,6 +1339,7 @@ export class AppComponent implements OnInit {
     if (!allowed) {
       console.log('Usage limit reached');
       this.isLimitExceeded.set(true);
+      this.isLoading.set(false); // Reset loading if not allowed
       return;
     }
 
@@ -1027,6 +1357,7 @@ export class AppComponent implements OnInit {
         timestamp: Date.now()
       };
       this.sessions.update(prev => [newSession, ...prev]);
+      this.syncChatToFirestore(newSession);
     }
 
     // Upload user file to Firebase Storage in the background if it exists
@@ -1049,13 +1380,6 @@ export class AppComponent implements OnInit {
       { id: msgId, role: 'user', text: text, fileData: file ? { name: file.name, mimeType: file.mimeType, data: file.data } : undefined }
     ]);
 
-    // Clear input and show loading immediately for better UX
-    this.inputMessage.set('');
-    this.selectedFile.set(null);
-    this.isLoading.set(true);
-    if (this.textarea?.nativeElement) this.textarea.nativeElement.style.height = 'auto';
-    this.scrollToBottom();
-
     // Add a placeholder for the model's response immediately
     const placeholderImages = useImageModel ? [{ url: null, mimeType: 'image/png', isPending: true }] : undefined;
     this.messages.update(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: '', generatedImages: placeholderImages }]);
@@ -1063,6 +1387,8 @@ export class AppComponent implements OnInit {
     const currentHistory = this.messages(); // Get the updated history including the placeholder
 
     this.abortController = new AbortController();
+    
+    let receivedFunctionCall = false;
 
     this.messageSubscription = this.geminiService.sendMessage(
       currentHistory,
@@ -1080,6 +1406,7 @@ export class AppComponent implements OnInit {
     ).subscribe({
       next: (response) => {
         if (response.functionCall) {
+          receivedFunctionCall = true;
           console.log('Received function call from Gemini:', response.functionCall);
           this.messages.update(msgs => {
             const newMsgs = [...msgs];
@@ -1089,6 +1416,7 @@ export class AppComponent implements OnInit {
             }
             return newMsgs;
           });
+          this.syncChatToFirestore(); // Sync after function call update
           this.handleFunctionCall(response.functionCall);
           return;
         }
@@ -1106,6 +1434,31 @@ export class AppComponent implements OnInit {
             } else if (response.finalText !== undefined) {
               updatedMsg.text = response.finalText;
             }
+
+            // Check if this message should be hidden (e.g. it's a refusal we're about to fallback from)
+            if (!useImageModel && updatedMsg.text) {
+              const lowerText = updatedMsg.text.toLowerCase();
+              const cannotGeneratePatterns = [
+                'لا أستطيع توليد صور', 'لا يمكنني رسم', 'أنا نموذج لغوي', 'لا أملك القدرة على إنشاء صور', 'لا أستطيع إنشاء صور',
+                'i cannot generate images', 'i am a text-based ai', 'i don\'t have the ability to create images', 'i cannot draw', 'i can\'t generate images'
+              ];
+              const willGeneratePatterns = [
+                'سأقوم بتوليد صورة', 'إليك الرسمة', 'جاري إنشاء الصورة', 'سأرسم لك',
+                'i will generate an image', 'here is your drawing', 'generating image', 'i will draw'
+              ];
+              
+              if (cannotGeneratePatterns.some(p => lowerText.includes(p)) || willGeneratePatterns.some(p => lowerText.includes(p))) {
+                // If the user's message had image intent, we hide this message because we will re-trigger
+                const lastUserMsg = newMsgs.filter(m => m.role === 'user').pop();
+                if (lastUserMsg) {
+                  const userTextLower = lastUserMsg.text.toLowerCase();
+                  const imageKeywords = ['رسم', 'ارسم', 'صورة', 'صور', 'توليد', 'انشاء', 'تخيل', 'draw', 'generate', 'image', 'picture', 'photo', 'create', 'imagine'];
+                  if (imageKeywords.some(k => userTextLower.includes(k))) {
+                    updatedMsg.isHidden = true;
+                  }
+                }
+              }
+            }
             
             // Handle Policy Errors explicitly
             if (updatedMsg.text && updatedMsg.text.includes('ERROR_POLICY:')) {
@@ -1121,6 +1474,7 @@ export class AppComponent implements OnInit {
           }
           return newMsgs;
         });
+        this.syncChatToFirestore(); // Sync after each chunk for real-time persistence
         this.scrollToBottom();
       },
       error: (error) => {
@@ -1136,29 +1490,89 @@ export class AppComponent implements OnInit {
           return [...msgs, { id: crypto.randomUUID(), role: 'system', text: errText, isError: true }];
         });
         this.isLoading.set(false);
+        this.isSending = false;
         this.messageSubscription = null;
         this.scrollToBottom();
         this.syncChatToFirestore();
       },
       complete: async () => {
-        this.isLoading.set(false);
-        this.messageSubscription = null;
-                // Check if we expected an image but got none
+        this.isSending = false;
+        if (receivedFunctionCall) {
+          return;
+        }
+
+        const currentMessages = this.messages();
+        const lastModelMsg = currentMessages[currentMessages.length - 1];
+        const lastUserMsg = currentMessages.filter(m => m.role === 'user').pop();
+
+        // Fallback Logic: If the model says it can't generate images but the user asked for one
+        if (!this.generateImage() && lastModelMsg?.role === 'model' && lastModelMsg.text && lastUserMsg) {
+          const textLower = lastModelMsg.text.toLowerCase();
+          const cannotGeneratePatterns = [
+            'لا أستطيع توليد صور', 'لا يمكنني رسم', 'أنا نموذج لغوي', 'لا أملك القدرة على إنشاء صور', 'لا أستطيع إنشاء صور',
+            'i cannot generate images', 'i am a text-based ai', 'i don\'t have the ability to create images', 'i cannot draw', 'i can\'t generate images'
+          ];
+
+          const willGeneratePatterns = [
+            'سأقوم بتوليد صورة', 'إليك الرسمة', 'جاري إنشاء الصورة', 'سأرسم لك', '[طلب توليد صورة:', 'توليد صورة:',
+            'i will generate an image', 'here is your drawing', 'generating image', 'i will draw', '[generate_image:', 'generate image:'
+          ];
+          
+          const userTextLower = lastUserMsg.text.toLowerCase();
+          const imageKeywords = ['رسم', 'ارسم', 'صورة', 'صور', 'توليد', 'انشاء', 'تخيل', 'بدي', 'أريد', 'اريد', 'draw', 'generate', 'image', 'picture', 'photo', 'create', 'imagine'];
+          const userHadImageIntent = imageKeywords.some(k => userTextLower.includes(k));
+
+          const modelClaimedFailure = cannotGeneratePatterns.some(p => textLower.includes(p));
+          const modelClaimedSuccessButNoTool = willGeneratePatterns.some(p => textLower.includes(p));
+
+          if (userHadImageIntent && (modelClaimedFailure || modelClaimedSuccessButNoTool)) {
+            console.log('Model response suggests image intent but no tool was called. Re-triggering...');
+            
+            // Try to extract a better prompt from the model's hallucinated tool call if present
+            let refinedPrompt = lastUserMsg.text;
+            const toolCallMatch = lastModelMsg.text.match(/\[طلب توليد صورة:\s*([^\]]+)\]/i) || 
+                               lastModelMsg.text.match(/\[generate_image:\s*([^\]]+)\]/i);
+            if (toolCallMatch && toolCallMatch[1]) {
+              refinedPrompt = toolCallMatch[1].trim();
+              console.log('Extracted refined prompt from model response:', refinedPrompt);
+            }
+
+            // Remove the model message
+            this.messages.update(msgs => msgs.slice(0, -1));
+            
+            // Re-send with image mode enabled
+            this.generateImage.set(true);
+            this.inputMessage.set(refinedPrompt);
+            this.sendMessage();
+            return;
+          }
+        }
+
+        // Check if we expected an image but got none
         if (this.generateImage()) {
            const lastMsg = this.messages()[this.messages().length - 1];
-           if (lastMsg.role === 'model' && (!lastMsg.generatedImages || lastMsg.generatedImages.length === 0)) {
+           const hasRealImages = lastMsg.generatedImages && lastMsg.generatedImages.some(img => img.url !== null);
+           if (lastMsg.role === 'model' && !hasRealImages) {
              // We expected an image but didn't get one.
              // Only add the error message if the model didn't provide a text explanation
              if (!lastMsg.text || lastMsg.text.trim().length < 5) {
-               this.messages.update(msgs => [
-                 ...msgs, 
-                 { 
+               this.messages.update(msgs => {
+                 const newMsgs = [...msgs];
+                 newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], generatedImages: undefined };
+                 newMsgs.push({ 
                    id: crypto.randomUUID(), 
                    role: 'system', 
                    text: this.currentLang() === 'ar' ? 'لم يتم إنشاء الصورة. قد يكون الوصف مخالفاً لسياسات المحتوى أو غير واضح.' : 'Image was not generated. The description might be unclear or violate content policies.',
                    isError: true 
-                 }
-               ]);
+                 });
+                 return newMsgs;
+               });
+             } else {
+               this.messages.update(msgs => {
+                 const newMsgs = [...msgs];
+                 newMsgs[newMsgs.length - 1] = { ...newMsgs[newMsgs.length - 1], generatedImages: undefined };
+                 return newMsgs;
+               });
              }
            }
         }
@@ -1181,14 +1595,16 @@ export class AppComponent implements OnInit {
             if (lastModelMessage && lastModelMessage.generatedImages && lastModelMessage.generatedImages.length > 0) {
               const updatedImages = [];
               for (const img of lastModelMessage.generatedImages) {
-                // Fix: Add null check for img.url
-                if (img.url && img.url.startsWith('data:')) { // Check if it's a base64 image
+                if (img.url && img.url.startsWith('data:')) { 
                   try {
                     const result = await this.authService.processAndUploadImage(user.uid, img.url, img.mimeType);
                     if (result.url) {
+                      if (result.blob) {
+                        this.imageService.cacheBlob(result.url, result.blob);
+                      }
                       updatedImages.push({ ...img, url: result.url, isPending: false });
                     } else if (result.localDataUrl) {
-                      updatedImages.push({ ...img, url: result.localDataUrl, isPending: false }); // Keep watermarked original if upload fails
+                      updatedImages.push({ ...img, url: result.localDataUrl, isPending: false });
                     } else {
                       updatedImages.push({ ...img, isPending: false });
                     }
@@ -1197,7 +1613,6 @@ export class AppComponent implements OnInit {
                     updatedImages.push({ ...img, isPending: false });
                   }
                 } else {
-                  // If it's already a URL or null (but not data:), just keep it but clear pending if it was
                   updatedImages.push({ ...img, isPending: false });
                 }
               }
@@ -1205,11 +1620,31 @@ export class AppComponent implements OnInit {
               this.messages.update(msgs => msgs.map(msg => 
                 msg.id === lastModelMessage!.id ? { ...msg, generatedImages: updatedImages } : msg
               ));
+              this.syncChatToFirestore(); // Sync after images are uploaded and URLs updated
             }
           } catch (e) {
             console.error('Failed to process generated images:', e);
           }
+        } else {
+          // For anonymous users, just set isPending to false
+          let lastModelMessage: ChatMessage | undefined;
+          const currentMessages = this.messages();
+          for (let i = currentMessages.length - 1; i >= 0; i--) {
+            if (currentMessages[i].role === 'model') {
+              lastModelMessage = currentMessages[i];
+              break;
+            }
+          }
+          if (lastModelMessage && lastModelMessage.generatedImages && lastModelMessage.generatedImages.length > 0) {
+            const updatedImages = lastModelMessage.generatedImages.map(img => ({ ...img, isPending: false }));
+            this.messages.update(msgs => msgs.map(msg => 
+              msg.id === lastModelMessage!.id ? { ...msg, generatedImages: updatedImages } : msg
+            ));
+          }
         }
+        
+        this.isLoading.set(false);
+        this.messageSubscription = null;
         this.syncChatToFirestore();
       }
     });
@@ -1235,19 +1670,20 @@ export class AppComponent implements OnInit {
     this.syncChatToFirestore();
   }
 
-  async syncChatToFirestore() {
+  async syncChatToFirestore(sessionOverride?: ChatSession) {
     const user = this.authService.user();
-    if (!user) return;
+    if (!user || this.isSyncingFromRemote) return;
 
     try {
       const sessionId = this.currentSessionId();
-      const session = this.sessions().find(s => s.id === sessionId);
+      const session = sessionOverride || this.sessions().find(s => s.id === sessionId);
       if (!session) return;
 
       const currentMessages = this.messages();
 
       const db = this.authService.db;
-      const chatDocRef = doc(db, 'users', user.uid, 'chats', sessionId);
+      const path = `users/${user.uid}/chats/${sessionId}`;
+      const chatDocRef = doc(db, path);
       
       // Deep clean messages for Firestore
       const cleanMessages = currentMessages.map(msg => {
@@ -1261,6 +1697,10 @@ export class AppComponent implements OnInit {
         if (msg.isEdited) clean.isEdited = true;
         if (msg.location) clean.location = JSON.parse(JSON.stringify(msg.location));
         
+        if (msg.route) {
+          clean.route = JSON.parse(JSON.stringify(msg.route));
+        }
+
         if (msg.fileData) {
           clean.fileData = {
             mimeType: msg.fileData.mimeType,
@@ -1284,7 +1724,8 @@ export class AppComponent implements OnInit {
             return {
               url: img.url,
               mimeType: img.mimeType,
-              alt: img.alt || null
+              alt: img.alt || null,
+              isPending: img.isPending
             };
           });
         }
@@ -1312,8 +1753,10 @@ export class AppComponent implements OnInit {
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
-    } catch (e) {
-      console.error('Failed to sync chat to DB', e);
+    } catch (error) {
+      const sessionId = this.currentSessionId();
+      const user = this.authService.user();
+      this.handleFirestoreError(error, OperationType.WRITE, `users/${user?.uid}/chats/${sessionId}`);
     }
   }
 

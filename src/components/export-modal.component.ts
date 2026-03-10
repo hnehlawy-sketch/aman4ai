@@ -1,10 +1,6 @@
 import { Component, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatMessage } from '../services/gemini.service';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
-import { Document, Packer, Paragraph, TextRun, AlignmentType, ShadingType } from 'docx';
-import saveAs from 'file-saver';
 import { translations } from '../translations';
 
 @Component({
@@ -44,10 +40,12 @@ export class ExportModalComponent {
   messages = input<ChatMessage[]>([]);
   close = output<void>();
 
-  exportAsTxt() {
+  async exportAsTxt() {
     this.close.emit();
     const msgs = this.messages();
     if (msgs.length === 0) return;
+
+    const { saveAs } = await import('file-saver');
 
     let textContent = `Aman AI Chat Export - ${new Date().toLocaleString()}\n\n`;
     msgs.forEach(msg => {
@@ -62,6 +60,9 @@ export class ExportModalComponent {
   async exportAsPdf() {
     this.close.emit();
     if (this.messages().length === 0) return;
+
+    const { jsPDF } = await import('jspdf');
+    const { default: html2canvas } = await import('html2canvas');
 
     const printContainer = document.createElement('div');
     printContainer.style.position = 'fixed';
@@ -139,7 +140,10 @@ export class ExportModalComponent {
     this.close.emit();
     if (this.messages().length === 0) return;
 
-    const paragraphs: Paragraph[] = [
+    const { Document, Packer, Paragraph, TextRun, AlignmentType, ShadingType } = await import('docx');
+    const { default: saveAs } = await import('file-saver');
+
+    const paragraphs: any[] = [
       new Paragraph({
         children: [new TextRun({ text: 'Aman AI Chat Export', bold: true, size: 32 })],
         alignment: AlignmentType.CENTER,

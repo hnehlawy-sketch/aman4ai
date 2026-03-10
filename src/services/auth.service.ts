@@ -1,11 +1,11 @@
 import { Injectable, signal, inject } from '@angular/core';
-import { UserProfile, PaymentRequest, SystemSettings } from '../models';
+import { UserProfile, PaymentRequest, SystemSettings, OperationType, FirestoreErrorInfo } from '../models';
 import { StorageService } from './storage.service';
 
 // Use a simpler, more standard import for Firebase compat.
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signOut, updateEmail, sendPasswordResetEmail } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, collection, limit, getDocs, getDocsFromServer, writeBatch, addDoc, where, query, updateDoc, deleteDoc, enableMultiTabIndexedDbPersistence, orderBy } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, collection, limit, getDocs, getDocsFromServer, writeBatch, addDoc, where, query, updateDoc, deleteDoc, enableMultiTabIndexedDbPersistence, orderBy, deleteField } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { User } from 'firebase/auth';
 
@@ -144,7 +144,11 @@ export class AuthService {
     // Clear local storage before signing out
     await this.storageService.clearAllSessions().catch(err => console.error('Failed to clear sessions during logout', err));
     await signOut(this.auth);
+    
+    // Reset user status
     this.isPremium.set(false);
+    this.isAdmin.set(false);
+    this.userPlan.set('free');
   }
 
   async resetPassword(email: string) {
@@ -160,16 +164,23 @@ export class AuthService {
     const user = this.auth.currentUser;
     if (!user) throw new Error('User not logged in');
     
-    await updateEmail(user, newEmail);
-    await updateDoc(doc(this.db, 'users', user.uid), { email: newEmail });
-    // Update local signal if needed, but onAuthStateChanged might handle it
+    try {
+      await updateEmail(user, newEmail);
+      await updateDoc(doc(this.db, 'users', user.uid), { email: newEmail });
+    } catch (error) {
+      this.handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    }
   }
 
   async updateUserMobile(mobile: string) {
     const user = this.auth.currentUser;
     if (!user) throw new Error('User not logged in');
 
-    await updateDoc(doc(this.db, 'users', user.uid), { mobile: mobile });
+    try {
+      await updateDoc(doc(this.db, 'users', user.uid), { mobile: mobile });
+    } catch (error) {
+      this.handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
+    }
   }
 
   async updateUserPhoto(file: File) {
@@ -369,64 +380,44 @@ export class AuthService {
 
   // --- Limit Checking ---
   async checkAndIncrementUsage(estimatedTokens: number): Promise<boolean> {
-    const plan = this.userPlan();
-    if (plan === 'premium') return true; // Premium (Gold) Account has no limits
+    // 1. Fast check using signals
+    if (this.isPremium()) return true;
 
+    const currentUsage = this.dailyUsage();
+    const limit = this.dailyLimit();
+
+    if (currentUsage + estimatedTokens > limit) {
+      return false; // Limit exceeded based on local state
+    }
+
+    // 2. Optimistic update
+    const newUsage = currentUsage + estimatedTokens;
+    this.dailyUsage.set(newUsage);
+
+    // 3. Async Firestore update (don't await this to keep chat fast)
     const user = this.user();
-    if (!user) return false;
-
-    try {
+    if (user) {
       const userRef = doc(this.db, 'users', user.uid);
-      const snap = await getDoc(userRef);
-
-      if (!snap.exists()) return false;
-
-      const data = snap.data();
-      if (!data) return false;
-
       const today = new Date().toDateString();
       
-      // Check if we need to reset
-      let currentUsage = data['dailyUsage'] || 0;
-      const lastUsageDate = data['usageDate'] || '';
-
-      if (lastUsageDate !== today) {
-        currentUsage = 0; // Reset for new day
-      }
-
-      // Use system settings for limits
-      const settings = this.systemSettings();
-      const defaultLimit = plan === 'pro' ? (settings?.limits.pro || 200000) : (settings?.limits.free || 60000);
-      const DAILY_LIMIT = data['customDailyLimit'] || defaultLimit;
-
-      if (currentUsage + estimatedTokens > DAILY_LIMIT) {
-        return false; // Limit exceeded
-      }
-
-      // Increment and update date (optimistic)
-      const newUsage = currentUsage + estimatedTokens;
       setDoc(userRef, {
         dailyUsage: newUsage,
         usageDate: today
-      }, { merge: true }).catch(err => console.warn('Failed to update usage (offline):', err.message));
-      
-      this.dailyUsage.set(newUsage);
-
-      return true;
-    } catch (e: any) {
-      console.warn('Usage check failed (offline?):', e.message);
-      // Strict mode: If we can't verify with DB, we assume limit reached to prevent abuse.
-      // However, we can check local signal as a fallback if it was already loaded.
-      // For custom limit, we might not have it locally easily, so we return false.
-      return false; 
+      }, { merge: true }).catch(err => {
+        console.warn('Failed to update usage in Firestore:', err.message);
+        // If Firestore update fails, we might want to revert or handle it, 
+        // but for now, we prioritize chat speed.
+      });
     }
+
+    return true;
   }
 
-  async updateUserDailyLimit(uid: string, limit: number) {
+  async updateUserDailyLimit(uid: string, limit: number | null) {
     await updateDoc(doc(this.db, 'users', uid), { customDailyLimit: limit });
   }
 
-  async submitPaymentRequest(transactionId: string, receiptUrl?: string, planRequested: 'pro' | 'premium' = 'premium') {
+  async submitPaymentRequest(transactionId: string, receiptUrl?: string, planRequested: string = 'premium') {
     const user = this.user();
     if (!user) throw new Error('User not logged in');
 
@@ -477,7 +468,7 @@ export class AuthService {
 
     // 2. Update user premium status
     const userRef = doc(this.db, 'users', request.uid);
-    const planToSet = request.planRequested || 'premium';
+    const planToSet = request.planRequested ? request.planRequested.split(' - ')[0] : 'premium';
     batch.update(userRef, { 
       isPremium: true,
       plan: planToSet
@@ -540,49 +531,10 @@ export class AuthService {
     this.systemSettings.set(settings);
   }
 
-  async getAllUsers(): Promise<any[]> {
-    try {
-      console.log('[AuthService] getAllUsers: Fetching from Firestore...');
-      const snapshot = await getDocs(collection(this.db, 'users'));
-      console.log('[AuthService] getAllUsers: Snapshot size:', snapshot.size);
-      if (snapshot.empty) {
-        console.warn('[AuthService] getAllUsers: Snapshot is empty.');
-      }
-      return snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
-    } catch (e: any) {
-      console.error('[AuthService] getAllUsers: Error fetching users:', e);
-      throw e;
-    }
-  }
-
-  async updateUserPremiumStatus(uid: string, isPremium: boolean) {
-    await updateDoc(doc(this.db, 'users', uid), { isPremium });
-  }
-
-  async updateUserPlan(uid: string, plan: 'free' | 'pro' | 'premium') {
-    await updateDoc(doc(this.db, 'users', uid), { 
-      plan: plan,
-      isPremium: plan === 'premium' || plan === 'pro' // Or however you define premium/pro
-    });
-  }
-
-  async updateUserStatus(uid: string, isSuspended: boolean) {
-    await updateDoc(doc(this.db, 'users', uid), { isSuspended });
-  }
-
-  async updateUserAccounting(uid: string, accountingId: string) {
-    await updateDoc(doc(this.db, 'users', uid), { accountingId });
-  }
-
-  async updateUserVariables(uid: string, variables: {[key: string]: any}) {
-    await updateDoc(doc(this.db, 'users', uid), { customVariables: variables });
-  }
-
-  async updateUserSubscription(uid: string, isPremium: boolean, endDate?: string) {
-    await updateDoc(doc(this.db, 'users', uid), { 
-      isPremium, 
-      subscriptionEndDate: endDate || null 
-    });
+  async uploadPaymentReceipt(uid: string, file: File): Promise<string> {
+    const fileRef = ref(this.storage, `users/${uid}/receipts/${Date.now()}-${file.name}`);
+    await uploadBytes(fileRef, file);
+    return await getDownloadURL(fileRef);
   }
 
   // --- Payment Methods Management ---
@@ -596,17 +548,40 @@ export class AuthService {
     }
   }
 
-  async getLogs(limitCount: number = 100): Promise<any[]> {
+  // --- Pricing Management ---
+  async getPricing(): Promise<any> {
     try {
-      const q = query(
-        collection(this.db, 'logs'),
-        orderBy('timestamp', 'desc'),
-        limit(limitCount)
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const docRef = doc(this.db, 'settings', 'pricing');
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        return snap.data();
+      }
+      // Default pricing if not set
+      return {
+        pro: {
+          monthly: { usd: 5, syp: 75000 },
+          yearly: { usd: 50, syp: 750000 }
+        },
+        premium: {
+          monthly: { usd: 10, syp: 150000 },
+          yearly: { usd: 100, syp: 1500000 }
+        }
+      };
     } catch (e: any) {
-      console.warn('[AuthService] getLogs failed:', e.message);
+      console.warn('[AuthService] getPricing failed:', e.message);
+      return {
+        pro: { monthly: { usd: 5, syp: 75000 }, yearly: { usd: 50, syp: 750000 } },
+        premium: { monthly: { usd: 10, syp: 150000 }, yearly: { usd: 100, syp: 1500000 } }
+      };
+    }
+  }
+
+  async updatePricing(pricing: any) {
+    try {
+      const docRef = doc(this.db, 'settings', 'pricing');
+      await setDoc(docRef, pricing, { merge: true });
+    } catch (e: any) {
+      console.error('[AuthService] updatePricing failed:', e.message);
       throw e;
     }
   }
@@ -642,14 +617,8 @@ export class AuthService {
     return url;
   }
 
-  async uploadPaymentReceipt(uid: string, file: File): Promise<string> {
-    const fileRef = ref(this.storage, `users/${uid}/receipts/${Date.now()}-${file.name}`);
-    await uploadBytes(fileRef, file);
-    return await getDownloadURL(fileRef);
-  }
-
   // --- Storage Helpers ---
-  async processAndUploadImage(uid: string, dataUrl: string, mimeType?: string, addWatermark: boolean = true): Promise<{ url: string | null, localDataUrl: string | null }> {
+  async processAndUploadImage(uid: string, dataUrl: string, mimeType?: string, addWatermark: boolean = true): Promise<{ url: string | null, localDataUrl: string | null, blob?: Blob }> {
     try {
       const isImage = mimeType?.startsWith('image/') ?? false;
       const safeUrl = dataUrl.startsWith('data:')
@@ -682,10 +651,10 @@ export class AuthService {
         const fileRef = ref(this.storage, `users/${uid}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extToUpload}`);
         await uploadBytes(fileRef, blobToUpload, { contentType: blobToUpload.type });
         const downloadUrl = await getDownloadURL(fileRef);
-        return { url: downloadUrl, localDataUrl };
+        return { url: downloadUrl, localDataUrl, blob: blobToUpload };
       } catch (uploadError) {
         console.error('Failed to upload file to Firebase (CORS or other error)', uploadError);
-        return { url: null, localDataUrl };
+        return { url: null, localDataUrl, blob: blobToUpload };
       }
     } catch (e) {
       console.error('Failed to process file', e);
@@ -757,11 +726,35 @@ export class AuthService {
   private getWatermarkSvgDataUrl(): string {
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="72" viewBox="0 0 220 72">' +
-      '<g transform="translate(0,8) scale(2.2)" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
-      '<path d="M12 1.5a4.5 4.5 0 0 0-4.5 4.5V9h9V6a4.5 4.5 0 0 0-4.5-4.5ZM12 12a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3ZM3 9h18v10.5a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9Z" />' +
+      '<g transform="translate(8,8) scale(2.2)" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />' +
+      '<path d="m9 12 2 2 4-4" />' +
       '</g>' +
-      '<text x="70" y="46" fill="#fff" font-size="28" font-family="Arial, sans-serif" font-weight="700">Aman</text>' +
+      '<text x="75" y="46" fill="#fff" font-size="28" font-family="Arial, sans-serif" font-weight="700">Aman</text>' +
       '</svg>';
     return `data:image/svg+xml;base64,${btoa(svg)}`;
+  }
+
+  handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+    const errInfo: FirestoreErrorInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      authInfo: {
+        userId: this.auth.currentUser?.uid,
+        email: this.auth.currentUser?.email,
+        emailVerified: this.auth.currentUser?.emailVerified,
+        isAnonymous: this.auth.currentUser?.isAnonymous,
+        tenantId: this.auth.currentUser?.tenantId,
+        providerInfo: this.auth.currentUser?.providerData.map(provider => ({
+          providerId: provider.providerId,
+          displayName: provider.displayName,
+          email: provider.email,
+          photoUrl: provider.photoURL
+        })) || []
+      },
+      operationType,
+      path
+    };
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+    throw new Error(JSON.stringify(errInfo));
   }
 }

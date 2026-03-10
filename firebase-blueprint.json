@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile and subscription data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "mobile": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "isPremium": { "type": "boolean" },
+        "plan": { "type": "string", "enum": ["free", "pro", "premium"] },
+        "lastLogin": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "ChatSession": {
+      "title": "Chat Session",
+      "description": "A conversation between user and AI",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "messages": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      },
+      "required": ["id", "messages"]
+    },
+    "LogEntry": {
+      "title": "Log Entry",
+      "description": "System log for monitoring and analytics",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "type": { "type": "string" },
+        "content": { "type": "object" },
+        "timestamp": { "type": "object" },
+        "tokens": { "type": "number" },
+        "metadata": { "type": "object" }
+      }
+    },
+    "PaymentRequest": {
+      "title": "Payment Request",
+      "description": "User request for plan upgrade",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "planRequested": { "type": "string" }
+      }
+    },
+    "PaymentMethod": {
+      "title": "Payment Method",
+      "description": "Available payment methods for users",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "details": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/users/{userId}/chats/{chatId}": {
+      "schema": "ChatSession",
+      "description": "User chat sessions"
+    },
+    "/logs/{logId}": {
+      "schema": "LogEntry",
+      "description": "Global system logs"
+    },
+    "/payment_requests/{requestId}": {
+      "schema": "PaymentRequest",
+      "description": "User payment upgrade requests"
+    },
+    "/payment_methods/{methodId}": {
+      "schema": "PaymentMethod",
+      "description": "Admin defined payment methods"
+    },
+    "/settings/system": {
+      "schema": "object",
+      "description": "Global system settings"
+    }
+  }
+}

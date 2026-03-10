@@ -1,0 +1,144 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string
+    //   - photoURL: string
+    //   - mobile: string
+    //   - isAdmin: boolean
+    //   - isPremium: boolean
+    //   - plan: string (free, pro, premium)
+    //   - lastLogin: string (ISO date)
+    //
+    // Collection: users/{userId}/chats
+    // Document ID: {chatId}
+    // Fields:
+    //   - id: string (required)
+    //   - title: string
+    //   - messages: list (required)
+    //   - timestamp: number
+    //
+    // Collection: logs
+    // Document ID: {logId}
+    // Fields:
+    //   - uid: string
+    //   - email: string
+    //   - type: string
+    //   - content: map
+    //   - timestamp: timestamp
+    //   - tokens: number
+    //   - metadata: map
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+          (request.auth.token.email == "h.nehlawy@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             validStringLength('uid', 1, 100) &&
+             validStringLength('email', 5, 255) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('isAdmin' in data) || data.isAdmin is bool) &&
+             (!('isPremium' in data) || data.isPremium is bool);
+    }
+
+    function isValidChat(data) {
+      return data.keys().hasAll(['id', 'messages']) &&
+             validStringLength('id', 1, 100) &&
+             data.messages is list && data.messages.size() < 1000 &&
+             (!('title' in data) || (data.title is string && data.title.size() < 200));
+    }
+
+    function isValidLog(data) {
+      return data.keys().hasAll(['type', 'timestamp']) &&
+             data.type is string &&
+             data.timestamp is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) && request.resource.data.isAdmin == false || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    ((isOwner(userId) && request.resource.data.isAdmin == resource.data.isAdmin) || isAdmin());
+      
+      match /chats {
+        allow list: if isOwner(userId) || isAdmin();
+      }
+      match /chats/{chatId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if (isOwner(userId) || isAdmin()) && isValidChat(request.resource.data);
+        allow update: if (isOwner(userId) || isAdmin()) && isValidChat(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && isValidLog(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    match /payment_requests/{requestId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.uid == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /payment_methods/{methodId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

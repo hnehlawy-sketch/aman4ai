@@ -149,7 +149,11 @@ import { translations } from '../translations';
                             <!-- Aman Logo Watermark (Bottom Right) -->
                             <div class="absolute bottom-3 right-3 z-20 pointer-events-none opacity-90">
                               <div class="px-2 py-1 bg-black/40 backdrop-blur-md rounded-lg border border-white/10 flex items-center gap-1.5 shadow-sm">
-                                 <div class="w-5 h-5 bg-blue-500 rounded-md flex items-center justify-center text-[10px] font-bold text-white shadow-sm">A</div>
+                                 <div class="w-5 h-5 bg-blue-500 rounded-md flex items-center justify-center text-white shadow-sm">
+                                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5">
+                                     <path fill-rule="evenodd" d="M12.516 2.17a.75.75 0 0 0-1.032 0 11.209 11.209 0 0 1-7.877 3.08.75.75 0 0 0-.722.515A12.74 12.74 0 0 0 2.25 9.75c0 5.942 4.064 10.933 9.563 12.348a.749.749 0 0 0 .374 0c5.499-1.415 9.563-6.406 9.563-12.348 0-1.39-.223-2.73-.635-3.985a.75.75 0 0 0-.722-.516l-.143.001c-2.996 0-5.717-1.17-7.734-3.08Zm3.094 8.016a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clip-rule="evenodd" />
+                                   </svg>
+                                 </div>
                                  <span class="text-[10px] font-bold text-white drop-shadow-md">Aman AI</span>
                               </div>
                             </div>
@@ -356,6 +360,49 @@ import { translations } from '../translations';
                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
                          <path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" />
                        </svg>
+                     </button>
+                   </div>
+                 </div>
+               </div>
+             }
+
+             <!-- ROUTE CARD -->
+             @if (message().route; as route) {
+               <div class="mt-4 mb-4 rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl animate-slide-up max-w-sm group/card">
+                 <div class="h-56 bg-slate-100 dark:bg-slate-950 relative overflow-hidden">
+                   <iframe 
+                     [src]="getRouteUrl(route.origin.lat, route.origin.lng, route.destination.lat, route.destination.lng)"
+                     width="100%" 
+                     height="100%" 
+                     style="border:0;" 
+                     allowfullscreen="" 
+                     loading="lazy" 
+                     referrerpolicy="no-referrer-when-downgrade">
+                   </iframe>
+                 </div>
+                 <div class="p-5">
+                   <div class="flex items-center gap-4 mb-5">
+                     <div class="flex-1">
+                       <p class="text-[10px] uppercase tracking-[0.15em] text-slate-400 font-bold mb-1">المسار</p>
+                       <h3 class="text-sm font-bold text-slate-800 dark:text-white truncate" [title]="route.origin.label">من: {{ route.origin.label }}</h3>
+                       <h3 class="text-sm font-bold text-slate-800 dark:text-white truncate" [title]="route.destination.label">إلى: {{ route.destination.label }}</h3>
+                       <div class="flex items-center gap-3 mt-2">
+                         @if (route.distance) {
+                           <p class="text-xs font-bold text-blue-600 dark:text-blue-400">{{ route.distance }}</p>
+                         }
+                         @if (route.duration) {
+                           <span class="text-slate-300 dark:text-slate-600">|</span>
+                           <p class="text-xs font-bold text-green-600 dark:text-green-400">{{ route.duration }}</p>
+                         }
+                       </div>
+                     </div>
+                   </div>
+                   <div class="flex gap-2">
+                     <button (click)="openRouteInMaps(route.origin.lat, route.origin.lng, route.destination.lat, route.destination.lng)" class="flex-1 py-3 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold transition-all hover:opacity-90 active:scale-[0.98] flex items-center justify-center gap-2 shadow-xl shadow-slate-900/10 dark:shadow-white/5">
+                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                         <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                       </svg>
+                       فتح في الخرائط
                      </button>
                    </div>
                  </div>
@@ -680,7 +727,7 @@ export class MessageBubbleComponent {
   }
 
   downloadImage(url: string) {
-    this.imageService.downloadImage(url, `aman-ai-image-${Date.now()}.png`);
+    this.imageService.downloadImageWithWatermark(url, `aman-ai-image-${Date.now()}.png`);
   }
 
   openInMaps(lat: number, lng: number, viewOnly: boolean = false) {
@@ -695,6 +742,16 @@ export class MessageBubbleComponent {
   getMapUrl(lat: number, lng: number): SafeResourceUrl {
     const url = `https://maps.google.com/maps?q=${lat},${lng}&hl=ar&z=15&output=embed`;
     return this.sanitizer.bypassSecurityTrustResourceUrl(url);
+  }
+
+  getRouteUrl(olat: number, olng: number, dlat: number, dlng: number): SafeResourceUrl {
+    const url = `https://maps.google.com/maps?saddr=${olat},${olng}&daddr=${dlat},${dlng}&hl=ar&output=embed`;
+    return this.sanitizer.bypassSecurityTrustResourceUrl(url);
+  }
+
+  openRouteInMaps(olat: number, olng: number, dlat: number, dlng: number) {
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${olat},${olng}&destination=${dlat},${dlng}`;
+    window.open(url, '_blank');
   }
 
   async downloadGeneratedFile(file: NonNullable<ChatMessage['generatedFile']>) {

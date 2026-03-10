@@ -4,6 +4,7 @@ import { CommonModule } from '@angular/common';
 import { GeminiService, ChatMessage } from '../services/gemini.service';
 import { AuthService } from '../services/auth.service';
 import { UiService } from '../services/ui.service';
+import { ImageService } from '../services/image.service';
 import { DataLoggingService } from '../services/data-logging.service';
 import { translations } from '../translations';
 import { SafePipe } from '../pipes/safe.pipe';
@@ -48,10 +49,31 @@ declare var window: any;
       </div>
 
       <!-- Main Content Area (Transcript & Visualizer) -->
-      <div class="flex-1 relative flex flex-col items-center justify-center p-6 z-10">
+      <div class="flex-1 relative flex flex-col items-center justify-center p-6 z-10 overflow-hidden">
         
+        <!-- Chat History Overlay (Subtle) -->
+        <div class="absolute inset-x-0 top-0 bottom-32 overflow-y-auto p-6 flex flex-col gap-4 mask-fade-top z-20 pointer-events-none">
+          <div class="flex-1"></div>
+          @for (msg of messages(); track msg.id) {
+            <div class="max-w-xl mx-auto w-full animate-fadeIn" [class.text-right]="msg.role === 'user'" [class.text-left]="msg.role === 'model'">
+              <div class="inline-block px-4 py-2 rounded-2xl backdrop-blur-md border border-white/5 text-sm pointer-events-auto"
+                   [class.bg-white/5]="msg.role === 'user'"
+                   [class.bg-indigo-500/10]="msg.role === 'model'">
+                <p class="text-white/60 leading-relaxed">{{ msg.text }}</p>
+                @if (msg.generatedImages; as images) {
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    @for (img of images; track img.url) {
+                      <img [src]="img.url" class="w-20 h-20 rounded-lg object-cover border border-white/10">
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+
         <!-- Central Visualizer (Canvas for precise drawing) -->
-        <div class="relative w-64 h-64 flex items-center justify-center mb-12">
+        <div class="relative w-48 h-48 flex items-center justify-center mb-8 shrink-0">
           <canvas #liveCanvas class="absolute inset-0 w-full h-full"></canvas>
           
           <!-- Core Orb -->
@@ -74,10 +96,28 @@ declare var window: any;
           @if (visualContent(); as content) {
             <div class="mb-6 animate-scaleIn">
               @if (content.type === 'image') {
-                <div class="relative group">
+                <div class="relative group max-w-fit mx-auto">
                   <img [src]="content.data" class="max-h-[300px] rounded-2xl shadow-2xl border-2 border-white/20 mx-auto object-contain bg-black/40">
-                  <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center p-4 rounded-2xl">
-                    <span class="text-xs text-white/80">تم التوليد بواسطة أمان</span>
+                  
+                  <!-- Actions Overlay -->
+                  <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 rounded-2xl">
+                    <button (click)="downloadImage(content.data)" class="p-3 bg-white/20 hover:bg-white/40 text-white rounded-full backdrop-blur-md transition-all hover:scale-110" title="Download">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 12.75l-3-3m0 0 3-3m-3 3h7.5" transform="rotate(-90 12 12)" />
+                      </svg>
+                    </button>
+                    <button (click)="uiService.openImageView(content.data)" class="p-3 bg-white/20 hover:bg-white/40 text-white rounded-full backdrop-blur-md transition-all hover:scale-110" title="View">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div class="absolute bottom-3 right-3 pointer-events-none opacity-90">
+                    <div class="px-2 py-1 bg-black/40 backdrop-blur-md rounded-lg border border-white/10 flex items-center gap-1.5 shadow-sm">
+                       <div class="w-4 h-4 bg-blue-500 rounded-md flex items-center justify-center text-[8px] font-bold text-white shadow-sm">A</div>
+                       <span class="text-[8px] font-bold text-white drop-shadow-md">Aman AI</span>
+                    </div>
                   </div>
                 </div>
               } @else if (content.type === 'map') {
@@ -94,6 +134,27 @@ declare var window: any;
                   <div class="absolute inset-0 bg-blue-900/20 pointer-events-none"></div>
                   <div class="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs border border-white/10">
                     {{ content.data.label || 'موقع جغرافي' }}
+                  </div>
+                </div>
+              } @else if (content.type === 'route') {
+                <div class="w-full h-[300px] rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl relative">
+                   <iframe 
+                    width="100%" 
+                    height="100%" 
+                    frameborder="0" 
+                    style="border:0"
+                    [src]="'https://www.google.com/maps/embed/v1/directions?key=' + (authService.systemSettings()?.mapsApiKey || 'YOUR_API_KEY') + '&origin=' + content.data.origin.lat + ',' + content.data.origin.lng + '&destination=' + content.data.destination.lat + ',' + content.data.destination.lng + '&mode=driving' | safe:'resource'"
+                    allowfullscreen>
+                  </iframe>
+                  <div class="absolute bottom-3 left-3 right-3 bg-black/60 backdrop-blur-md px-3 py-2 rounded-xl text-xs border border-white/10 flex justify-between items-center">
+                    <div class="flex gap-2">
+                      <span class="font-bold text-blue-400">{{ content.data.distance }}</span>
+                      @if (content.data.duration) {
+                        <span class="text-white/40">|</span>
+                        <span class="font-bold text-green-400">{{ content.data.duration }}</span>
+                      }
+                    </div>
+                    <span class="opacity-70 truncate max-w-[150px]">{{ content.data.origin.label }} ➔ {{ content.data.destination.label }}</span>
                   </div>
                 </div>
               }
@@ -170,6 +231,7 @@ export class LiveChatComponent implements OnDestroy {
   geminiService = inject(GeminiService);
   authService = inject(AuthService);
   uiService = inject(UiService);
+  imageService = inject(ImageService);
   private logger = inject(DataLoggingService);
 
   t = input<any>(translations.ar);
@@ -181,7 +243,7 @@ export class LiveChatComponent implements OnDestroy {
   liveError = signal('');
   showVoiceSelector = signal(false);
   
-  visualContent = signal<{ type: 'image' | 'map', data: any } | null>(null);
+  visualContent = signal<{ type: 'image' | 'map' | 'route', data: any } | null>(null);
   
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -201,6 +263,10 @@ export class LiveChatComponent implements OnDestroy {
 
   ngOnDestroy() {
     this.closeLiveView();
+  }
+
+  downloadImage(url: string) {
+    this.imageService.downloadImage(url);
   }
 
   closeLiveView() {
@@ -382,24 +448,32 @@ export class LiveChatComponent implements OnDestroy {
   handleLiveMessage(msg: any) {
     console.log('[LiveChat] Received message:', JSON.stringify(msg, null, 2));
     
-    // Handle transcriptions
+    // 1. Handle Transcriptions (Real-time feedback)
     if (msg.inputTranscription) {
-      this.liveInterimTranscript.set(msg.inputTranscription.data);
+      const text = msg.inputTranscription.data;
       if (msg.inputTranscription.final) {
-        this.addMessageToHistory('user', msg.inputTranscription.data);
+        this.liveFinalTranscript.set(text);
         this.liveInterimTranscript.set('');
+        // We don't add to history here yet, we wait for turnComplete to avoid duplicates
+        // unless it's a long pause. But turnComplete is safer.
+        this.currentUserText = text; 
+      } else {
+        this.liveInterimTranscript.set(text);
       }
     }
 
     if (msg.outputTranscription) {
-      this.liveInterimTranscript.set(msg.outputTranscription.data);
+      const text = msg.outputTranscription.data;
       if (msg.outputTranscription.final) {
-        this.addMessageToHistory('model', msg.outputTranscription.data);
+        this.liveFinalTranscript.set(text);
         this.liveInterimTranscript.set('');
+        this.currentModelText = text;
+      } else {
+        this.liveInterimTranscript.set(text);
       }
     }
 
-    // Handle audio output and direct text parts
+    // 2. Handle Content Parts (Actual data)
     if (msg.serverContent?.modelTurn?.parts) {
       let text = '';
       for (const part of msg.serverContent.modelTurn.parts) {
@@ -410,7 +484,7 @@ export class LiveChatComponent implements OnDestroy {
       }
       if (text) {
         this.currentModelText += text;
-        this.liveInterimTranscript.set(this.currentModelText);
+        this.liveFinalTranscript.set(this.currentModelText);
       }
     }
 
@@ -421,12 +495,13 @@ export class LiveChatComponent implements OnDestroy {
       }
       if (text) {
         this.currentUserText += text;
-        this.liveInterimTranscript.set(this.currentUserText);
+        this.liveFinalTranscript.set(this.currentUserText);
       }
     }
 
-    // Handle turn completion
+    // 3. Handle Turn Completion (Commit to history)
     if (msg.serverContent?.turnComplete) {
+      console.log('[LiveChat] Turn complete. Syncing to history...');
       if (this.currentUserText.trim()) {
         this.addMessageToHistory('user', this.currentUserText.trim());
         this.currentUserText = '';
@@ -435,23 +510,27 @@ export class LiveChatComponent implements OnDestroy {
         this.addMessageToHistory('model', this.currentModelText.trim());
         this.currentModelText = '';
       }
+      this.liveFinalTranscript.set('');
       this.liveInterimTranscript.set('');
     }
 
-    // Handle tool calls
+    // 4. Handle Tool Calls
     if (msg.toolCall) {
-      console.log('Live Tool Call received:', msg.toolCall);
+      console.log('[LiveChat] Tool Call received:', msg.toolCall);
       for (const call of msg.toolCall.functionCalls) {
         this.handleLiveToolCall(call);
       }
     }
 
-    // Handle interruptions
+    // 5. Handle Interruptions
     if (msg.serverContent?.interrupted) {
+      console.log('[LiveChat] Session interrupted');
       if (this.currentModelText.trim()) {
         this.addMessageToHistory('model', this.currentModelText.trim() + ' [تمت المقاطعة]');
         this.currentModelText = '';
       }
+      this.liveFinalTranscript.set('');
+      this.liveInterimTranscript.set('');
       this.interruptAISpeech();
     }
   }
@@ -477,13 +556,35 @@ export class LiveChatComponent implements OnDestroy {
         uid: this.authService.user()?.uid,
         email: this.authService.user()?.email || ''
       }).subscribe({
-        next: (res) => {
+        next: async (res) => {
           console.log('[LiveChat] Image generation response:', res);
           if (res.images && res.images.length > 0) {
             console.log('[LiveChat] Image generated successfully:', res.images[0].url);
-            const imageUrl = res.images[0].url;
-            this.visualContent.set({ type: 'image', data: imageUrl });
-            this.addMessageToHistory('model', `[تم توليد الصورة: ${args.prompt}]`, [{ url: imageUrl, mimeType: 'image/png' }]);
+            const rawImageUrl = res.images[0].url;
+            const mimeType = res.images[0].mimeType || 'image/png';
+            
+            // Set initial visual content (raw)
+            this.visualContent.set({ type: 'image', data: rawImageUrl });
+            
+            // Process with watermark and upload
+            const user = this.authService.user();
+            if (user && rawImageUrl.startsWith('data:')) {
+              try {
+                const result = await this.authService.processAndUploadImage(user.uid, rawImageUrl, mimeType);
+                const finalUrl = result.url || result.localDataUrl || rawImageUrl;
+                
+                // Update visual content with watermarked version
+                this.visualContent.set({ type: 'image', data: finalUrl });
+                
+                // Add to history with watermarked version
+                this.addMessageToHistory('model', `[تم توليد الصورة: ${args.prompt}]`, [{ url: finalUrl, mimeType }]);
+              } catch (e) {
+                console.error('[LiveChat] Failed to process image:', e);
+                this.addMessageToHistory('model', `[تم توليد الصورة: ${args.prompt}]`, [{ url: rawImageUrl, mimeType }]);
+              }
+            } else {
+              this.addMessageToHistory('model', `[تم توليد الصورة: ${args.prompt}]`, [{ url: rawImageUrl, mimeType }]);
+            }
           } else {
             console.warn('[LiveChat] Image generation failed: No images returned');
             this.uiService.showToast('فشل توليد الصورة', 'error');
@@ -525,6 +626,73 @@ export class LiveChatComponent implements OnDestroy {
           this.addMessageToHistory('model', `[تم العثور على الموقع: ${label}]`);
         }
       } catch (e) {}
+
+    } else if (name === 'getDirections') {
+      intentText = `[طلب البحث عن مسار من ${args.originQuery} إلى ${args.destinationQuery}]`;
+      toastMessage = `جاري البحث عن المسار...`;
+      isCustomTool = true;
+
+      try {
+        let originLat, originLng, originLabel;
+        if (args.originQuery.toLowerCase().includes('current') || args.originQuery.includes('حالي') || args.originQuery.includes('موقعي')) {
+           const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+             navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000, enableHighAccuracy: true });
+           });
+           originLat = pos.coords.latitude;
+           originLng = pos.coords.longitude;
+           originLabel = 'موقعك الحالي';
+        } else {
+           const res1 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(args.originQuery)}`);
+           const data1 = await res1.json();
+           if (data1 && data1.length > 0) {
+             originLat = parseFloat(data1[0].lat);
+             originLng = parseFloat(data1[0].lon);
+             originLabel = data1[0].display_name.split(',')[0];
+           } else {
+             throw new Error(`Origin not found: ${args.originQuery}`);
+           }
+        }
+
+        const res2 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(args.destinationQuery)}`);
+        const data2 = await res2.json();
+        let destLat, destLng, destLabel;
+        if (data2 && data2.length > 0) {
+           destLat = parseFloat(data2[0].lat);
+           destLng = parseFloat(data2[0].lon);
+           destLabel = data2[0].display_name.split(',')[0];
+        } else {
+           throw new Error(`Destination not found: ${args.destinationQuery}`);
+        }
+
+        let distanceText = '';
+        let durationText = '';
+        try {
+           const osrmRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destLng},${destLat}?overview=false`);
+           const osrmData = await osrmRes.json();
+           if (osrmData && osrmData.routes && osrmData.routes.length > 0) {
+              const distanceKm = (osrmData.routes[0].distance / 1000).toFixed(1);
+              const durationMin = Math.round(osrmData.routes[0].duration / 60);
+              distanceText = `${distanceKm} كم`;
+              durationText = `${durationMin} دقيقة`;
+           }
+        } catch (e) {
+           console.error('Failed to fetch route distance', e);
+        }
+
+        this.visualContent.set({ 
+          type: 'route', 
+          data: { 
+            origin: { lat: originLat, lng: originLng, label: originLabel },
+            destination: { lat: destLat, lng: destLng, label: destLabel },
+            distance: distanceText,
+            duration: durationText
+          } 
+        });
+        this.addMessageToHistory('model', `[تم العثور على المسار من ${originLabel} إلى ${destLabel}: ${distanceText} (${durationText})]`);
+      } catch (e) {
+        console.error('[LiveChat] Route search failed:', e);
+        this.uiService.showToast('فشل البحث عن المسار', 'error');
+      }
 
     } else if (name === 'googleSearch') {
       intentText = `[طلب بحث في الويب]`;
