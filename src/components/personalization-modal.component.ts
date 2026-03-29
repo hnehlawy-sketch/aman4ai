@@ -1,10 +1,19 @@
-import { Component, inject, input, output, WritableSignal, Output, EventEmitter, signal } from '@angular/core';
+import { Component, inject, input, output, signal, OnInit, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth.service';
 import { UiService } from '../services/ui.service';
+import { ThemeService } from '../services/theme.service';
+import { TranslationService } from '../services/translation.service';
 import { UserProfile } from '../models';
-import { translations } from '../translations';
+
+export const DEFAULT_PROFILE: UserProfile = {
+  name: '',
+  dob: '',
+  education: 'unspecified',
+  maritalStatus: 'unspecified',
+  instructions: ''
+};
 
 @Component({
   selector: 'app-personalization-modal',
@@ -17,16 +26,16 @@ import { translations } from '../translations';
        
        <!-- Modal Content -->
        <div class="w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl p-5 sm:p-8 relative z-10 animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)] max-h-[90vh] sm:max-h-[85vh] overflow-y-auto"
-            [class.bg-white]="theme() === 'light'"
-            [class.bg-slate-900]="theme() === 'dark'"
-            [class.border]="theme() === 'dark'"
-            [class.border-slate-800]="theme() === 'dark'">
+            [class.bg-white]="!themeService.isDark()"
+            [class.bg-slate-900]="themeService.isDark()"
+            [class.border]="themeService.isDark()"
+            [class.border-slate-800]="themeService.isDark()">
          
          <!-- Header -->
          <div class="flex items-start justify-between mb-6">
             <div class="flex flex-col">
-              <h2 class="text-xl font-bold">{{ t().personalization }}</h2>
-              <p class="text-sm opacity-60 mt-1">{{ t().personalizationSub }}</p>
+              <h2 class="text-xl font-bold">{{ translationService.t().personalization }}</h2>
+              <p class="text-sm opacity-60 mt-1">{{ translationService.t().personalizationSub }}</p>
             </div>
             <button (click)="uiService.closePersonalizationModal()" class="p-2 -mr-2 -mt-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors opacity-50 hover:opacity-100">
              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -40,70 +49,70 @@ import { translations } from '../translations';
            <!-- Name & DOB -->
            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label class="text-xs font-bold opacity-70 mb-1 block">{{ t().name }}</label>
-                <input [value]="profileFormSignal()().name" (input)="updateProfileName($any($event.target).value)" type="text" [placeholder]="t().name" class="w-full px-3 py-2.5 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+                <label class="text-xs font-bold opacity-70 mb-1 block">{{ translationService.t().name }}</label>
+                <input [value]="profileForm().name" (input)="updateProfileName($any($event.target).value)" type="text" [placeholder]="translationService.t().name" class="w-full px-3 py-2.5 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700">
               </div>
               <div>
-                <label class="text-xs font-bold opacity-70 mb-1 block">{{ t().dob }}</label>
-                <input [value]="profileFormSignal()().dob" (input)="updateProfileDob($any($event.target).value)" type="date" class="w-full px-3 py-2.5 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+                <label class="text-xs font-bold opacity-70 mb-1 block">{{ translationService.t().dob }}</label>
+                <input [value]="profileForm().dob" (input)="updateProfileDob($any($event.target).value)" type="date" class="w-full px-3 py-2.5 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700">
               </div>
            </div>
            
            <!-- Education & Marital Status -->
            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
              <div>
-                <label class="text-xs font-bold opacity-70 mb-1 block">{{ t().education }}</label>
-                <select [value]="profileFormSignal()().education" (change)="updateProfileEducation($any($event.target).value)" class="w-full px-3 py-2.5 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700">
-                  <option value="unspecified">{{t().eduUnspecified}}</option>
-                  <option value="highschool">{{t().eduHighschool}}</option>
-                  <option value="diploma">{{t().eduDiploma}}</option>
-                  <option value="university">{{t().eduUniversity}}</option>
-                  <option value="masters">{{t().eduMasters}}</option>
-                  <option value="phd">{{t().eduPhd}}</option>
+                <label class="text-xs font-bold opacity-70 mb-1 block">{{ translationService.t().education }}</label>
+                <select [value]="profileForm().education" (change)="updateProfileEducation($any($event.target).value)" class="w-full px-3 py-2.5 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+                  <option value="unspecified">{{translationService.t().eduUnspecified}}</option>
+                  <option value="highschool">{{translationService.t().eduHighschool}}</option>
+                  <option value="diploma">{{translationService.t().eduDiploma}}</option>
+                  <option value="university">{{translationService.t().eduUniversity}}</option>
+                  <option value="masters">{{translationService.t().eduMasters}}</option>
+                  <option value="phd">{{translationService.t().eduPhd}}</option>
                 </select>
              </div>
              <div>
-                <label class="text-xs font-bold opacity-70 mb-1 block">{{ t().maritalStatus }}</label>
-                <select [value]="profileFormSignal()().maritalStatus" (change)="updateProfileMaritalStatus($any($event.target).value)" class="w-full px-3 py-2.5 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700">
-                  <option value="unspecified">{{t().msUnspecified}}</option>
-                  <option value="single">{{t().msSingle}}</option>
-                  <option value="married">{{t().msMarried}}</option>
-                  <option value="divorced">{{t().msDivorced}}</option>
-                  <option value="widowed">{{t().msWidowed}}</option>
+                <label class="text-xs font-bold opacity-70 mb-1 block">{{ translationService.t().maritalStatus }}</label>
+                <select [value]="profileForm().maritalStatus" (change)="updateProfileMaritalStatus($any($event.target).value)" class="w-full px-3 py-2.5 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700">
+                  <option value="unspecified">{{translationService.t().msUnspecified}}</option>
+                  <option value="single">{{translationService.t().msSingle}}</option>
+                  <option value="married">{{translationService.t().msMarried}}</option>
+                  <option value="divorced">{{translationService.t().msDivorced}}</option>
+                  <option value="widowed">{{translationService.t().msWidowed}}</option>
                 </select>
              </div>
            </div>
 
            <!-- Instructions -->
            <div>
-              <label class="text-xs font-bold opacity-70 mb-1 block">{{ t().instructions }}</label>
-              <textarea [value]="profileFormSignal()().instructions" (input)="updateProfileInstructions($any($event.target).value)" rows="5" [placeholder]="t().instructionsPlaceholder" class="w-full px-3 py-2.5 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700 resize-y"></textarea>
+              <label class="text-xs font-bold opacity-70 mb-1 block">{{ translationService.t().instructions }}</label>
+              <textarea [value]="profileForm().instructions" (input)="updateProfileInstructions($any($event.target).value)" rows="5" [placeholder]="translationService.t().instructionsPlaceholder" class="w-full px-3 py-2.5 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700 resize-y"></textarea>
            </div>
 
            <!-- Voice Selection -->
            <div>
-              <label class="text-xs font-bold opacity-70 mb-1 block">{{ t().voicePreference || 'تفضيل الصوت (للمحادثة المباشرة)' }}</label>
+              <label class="text-xs font-bold opacity-70 mb-1 block">{{ translationService.t().voicePreference }}</label>
               <div class="grid grid-cols-2 gap-3">
                 <button (click)="updateProfileVoice('Puck')" 
                         class="p-3 rounded-xl border transition-all flex items-center justify-center gap-2"
-                        [class.border-blue-500]="profileFormSignal()().voiceName === 'Puck'"
-                        [class.bg-blue-50]="profileFormSignal()().voiceName === 'Puck' && theme() === 'light'"
-                        [class.bg-blue-900/20]="profileFormSignal()().voiceName === 'Puck' && theme() === 'dark'"
-                        [class.border-gray-200]="profileFormSignal()().voiceName !== 'Puck' && theme() === 'light'"
-                        [class.border-slate-700]="profileFormSignal()().voiceName !== 'Puck' && theme() === 'dark'">
+                        [class.border-blue-500]="profileForm().voiceName === 'Puck'"
+                        [class.bg-blue-50]="profileForm().voiceName === 'Puck' && !themeService.isDark()"
+                        [class.bg-blue-900/20]="profileForm().voiceName === 'Puck' && themeService.isDark()"
+                        [class.border-gray-200]="profileForm().voiceName !== 'Puck' && !themeService.isDark()"
+                        [class.border-slate-700]="profileForm().voiceName !== 'Puck' && themeService.isDark()">
                   <span class="text-2xl">👨</span>
-                  <span class="font-medium text-sm">{{ t().voiceMale || 'صوت شاب' }}</span>
+                  <span class="font-medium text-sm">{{ translationService.t().voiceMale }}</span>
                 </button>
                 
                 <button (click)="updateProfileVoice('Kore')" 
                         class="p-3 rounded-xl border transition-all flex items-center justify-center gap-2"
-                        [class.border-blue-500]="profileFormSignal()().voiceName === 'Kore'"
-                        [class.bg-blue-50]="profileFormSignal()().voiceName === 'Kore' && theme() === 'light'"
-                        [class.bg-blue-900/20]="profileFormSignal()().voiceName === 'Kore' && theme() === 'dark'"
-                        [class.border-gray-200]="profileFormSignal()().voiceName !== 'Kore' && theme() === 'light'"
-                        [class.border-slate-700]="profileFormSignal()().voiceName !== 'Kore' && theme() === 'dark'">
+                        [class.border-blue-500]="profileForm().voiceName === 'Kore'"
+                        [class.bg-blue-50]="profileForm().voiceName === 'Kore' && !themeService.isDark()"
+                        [class.bg-blue-900/20]="profileForm().voiceName === 'Kore' && themeService.isDark()"
+                        [class.border-gray-200]="profileForm().voiceName !== 'Kore' && !themeService.isDark()"
+                        [class.border-slate-700]="profileForm().voiceName !== 'Kore' && themeService.isDark()">
                   <span class="text-2xl">👩</span>
-                  <span class="font-medium text-sm">{{ t().voiceFemale || 'صوت فتاة' }}</span>
+                  <span class="font-medium text-sm">{{ translationService.t().voiceFemale }}</span>
                 </button>
               </div>
            </div>
@@ -112,63 +121,66 @@ import { translations } from '../translations';
          <!-- Actions -->
          <div class="mt-6 sm:mt-8 flex justify-end">
            <button (click)="saveProfile()" class="w-full sm:w-auto px-6 py-3 sm:py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-slate-900/10 active:scale-95 transition-transform"
-             [class.bg-slate-900]="theme() === 'light'"
-             [class.text-white]="theme() === 'light'"
-             [class.bg-white]="theme() === 'dark'"
-             [class.text-slate-900]="theme() === 'dark'"
+             [class.bg-slate-900]="!themeService.isDark()"
+             [class.text-white]="!themeService.isDark()"
+             [class.bg-white]="themeService.isDark()"
+             [class.text-slate-900]="themeService.isDark()"
            >
-             {{ t().saveProfile }}
+             {{ translationService.t().saveProfile }}
            </button>
          </div>
        </div>
     </div>
   `
 })
-export class PersonalizationModalComponent {
+export class PersonalizationModalComponent implements OnInit {
   authService = inject(AuthService);
   uiService = inject(UiService);
+  themeService = inject(ThemeService);
+  translationService = inject(TranslationService);
   
-  t = input<any>(translations.ar);
-  theme = input<'light' | 'dark'>('light');
-  profileFormSignal = input<WritableSignal<UserProfile>>(signal({ name: '', dob: '', education: 'unspecified', maritalStatus: 'unspecified', instructions: '' }) as any);
-  @Output() profileSaved = new EventEmitter<void>();
+  profileForm = signal<UserProfile>(DEFAULT_PROFILE);
+
+  ngOnInit() {
+    const currentProfile = this.authService.userProfile();
+    if (currentProfile) {
+      this.profileForm.set({ ...DEFAULT_PROFILE, ...currentProfile });
+    }
+  }
 
   updateProfileName(name: string) {
-    this.profileFormSignal().update(p => ({ ...p, name }));
+    this.profileForm.update(p => ({ ...p, name }));
   }
 
   updateProfileDob(dob: string) {
-    this.profileFormSignal().update(p => ({ ...p, dob }));
+    this.profileForm.update(p => ({ ...p, dob }));
   }
 
   updateProfileEducation(education: string) {
-    this.profileFormSignal().update(p => ({ ...p, education: education as UserProfile['education'] }));
+    this.profileForm.update(p => ({ ...p, education: education as UserProfile['education'] }));
   }
 
   updateProfileMaritalStatus(maritalStatus: string) {
-    this.profileFormSignal().update(p => ({ ...p, maritalStatus: maritalStatus as UserProfile['maritalStatus'] }));
+    this.profileForm.update(p => ({ ...p, maritalStatus: maritalStatus as UserProfile['maritalStatus'] }));
   }
 
   updateProfileInstructions(instructions: string) {
-    this.profileFormSignal().update(p => ({ ...p, instructions }));
+    this.profileForm.update(p => ({ ...p, instructions }));
   }
 
   updateProfileVoice(voiceName: 'Puck' | 'Kore') {
-    this.profileFormSignal().update(p => ({ ...p, voiceName }));
+    this.profileForm.update(p => ({ ...p, voiceName }));
   }
 
   async saveProfile() {
     const user = this.authService.user();
     if (!user) return;
 
-    const profileData = this.profileFormSignal()();
+    const profileData = this.profileForm();
     await this.authService.saveUserProfile(user.uid, profileData);
     
-    // Parent component will update the main userProfile signal via an effect
-    // But we can also set it directly for immediate feedback if we pass it in.
     localStorage.setItem(`aman_profile_${user.uid}`, JSON.stringify(profileData));
     
-    this.profileSaved.emit();
     this.uiService.closePersonalizationModal();
   }
 }

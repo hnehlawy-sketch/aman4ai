@@ -1,7 +1,11 @@
-import { Component, inject, input, output } from '@angular/core';
+import { Component, inject, input, output, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatMessage } from '../services/gemini.service';
-import { translations } from '../translations';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
+import { Document, Packer, Paragraph, TextRun, AlignmentType, ShadingType } from 'docx';
+import saveAs from 'file-saver';
+import { TranslationService } from '../services/translation.service';
 
 @Component({
   selector: 'app-export-modal',
@@ -19,13 +23,21 @@ import { translations } from '../translations';
          <div class="flex flex-col items-center text-center">
             <h2 class="text-xl font-bold mb-4">{{ t().exportTitle }}</h2>
             <div class="w-full space-y-3">
-              <button (click)="exportAsTxt()" class="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl transition-colors bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10">
+              <button (click)="exportAsTxt()" [disabled]="isExporting()" class="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl transition-colors bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50">
                 <span class="font-bold text-sm">TXT</span> {{ t().exportTxt }}
               </button>
-              <button (click)="exportAsPdf()" class="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl transition-colors bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10">
-                <span class="font-bold text-sm">PDF</span> {{ t().exportPdf }}
+              <button (click)="exportAsPdf()" [disabled]="isExporting()" class="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl transition-colors bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50">
+                @if (isExporting()) {
+                  <svg class="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>{{ t().exporting || 'جاري التصدير...' }}</span>
+                } @else {
+                  <span class="font-bold text-sm">PDF</span> {{ t().exportPdf }}
+                }
               </button>
-              <button (click)="exportAsDocx()" class="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl transition-colors bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10">
+              <button (click)="exportAsDocx()" [disabled]="isExporting()" class="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl transition-colors bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50">
                 <span class="font-bold text-sm">DOCX</span> {{ t().exportDocx }}
               </button>
             </div>
@@ -35,17 +47,20 @@ import { translations } from '../translations';
   `
 })
 export class ExportModalComponent {
-  t = input<any>(translations.ar);
+  translationService = inject(TranslationService);
   theme = input<'light' | 'dark'>('light');
   messages = input<ChatMessage[]>([]);
   close = output<void>();
 
-  async exportAsTxt() {
+  t = computed(() => this.translationService.t());
+  currentLang = computed(() => this.translationService.currentLang());
+
+  isExporting = signal(false);
+
+  exportAsTxt() {
     this.close.emit();
     const msgs = this.messages();
     if (msgs.length === 0) return;
-
-    const { saveAs } = await import('file-saver');
 
     let textContent = `Aman AI Chat Export - ${new Date().toLocaleString()}\n\n`;
     msgs.forEach(msg => {
@@ -58,46 +73,63 @@ export class ExportModalComponent {
   }
 
   async exportAsPdf() {
-    this.close.emit();
+    if (this.isExporting()) return;
     if (this.messages().length === 0) return;
 
-    const { jsPDF } = await import('jspdf');
-    const { default: html2canvas } = await import('html2canvas');
-
+    this.isExporting.set(true);
+    
     const printContainer = document.createElement('div');
     printContainer.style.position = 'fixed';
     printContainer.style.left = '-9999px';
-    printContainer.style.width = '794px';
-    printContainer.style.padding = '20px';
+    printContainer.style.width = '794px'; // A4 width at 96 DPI
+    printContainer.style.padding = '40px';
     printContainer.style.backgroundColor = 'white';
     printContainer.style.color = 'black';
-    printContainer.style.fontFamily = 'Amiri, Cairo, sans-serif';
-    printContainer.innerHTML = `<h1 style="font-family: Amiri; font-size: 24px; text-align: center;">Aman AI Chat Export</h1><hr style="margin: 10px 0;">`;
+    printContainer.style.fontFamily = "'Cairo', 'Amiri', sans-serif";
+    printContainer.style.direction = 'rtl';
+    
+    printContainer.innerHTML = `
+      <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #3b82f6; padding-bottom: 15px;">
+        <h1 style="font-size: 28px; color: #1e293b; margin: 0;">Aman AI Chat Export</h1>
+        <p style="font-size: 14px; color: #64748b; margin-top: 5px;">${new Date().toLocaleString('ar-SA')}</p>
+      </div>
+    `;
 
     this.messages().forEach(msg => {
         const msgDiv = document.createElement('div');
-        msgDiv.style.marginBottom = '15px';
-        msgDiv.style.padding = '10px';
-        msgDiv.style.borderRadius = '8px';
-        msgDiv.style.border = '1px solid #eee';
+        msgDiv.style.marginBottom = '20px';
+        msgDiv.style.padding = '15px';
+        msgDiv.style.borderRadius = '12px';
+        msgDiv.style.border = '1px solid #e2e8f0';
+        msgDiv.style.position = 'relative';
 
-        const role = document.createElement('strong');
-        role.textContent = msg.role === 'user' ? 'You:' : 'Aman:';
-        role.style.display = 'block';
-        role.style.marginBottom = '5px';
+        const role = document.createElement('div');
+        role.style.fontWeight = 'bold';
+        role.style.fontSize = '12px';
+        role.style.marginBottom = '8px';
+        role.style.textTransform = 'uppercase';
+        role.style.letterSpacing = '0.05em';
         
-        const text = document.createElement('p');
+        const isUser = msg.role === 'user';
+        role.textContent = isUser ? 'أنت' : 'أمان';
+        role.style.color = isUser ? '#2563eb' : '#059669';
+        
+        const text = document.createElement('div');
         text.textContent = msg.text;
         text.style.whiteSpace = 'pre-wrap';
         text.style.margin = '0';
+        text.style.fontSize = '16px';
+        text.style.lineHeight = '1.6';
 
-        if (msg.role === 'user') {
-            msgDiv.style.backgroundColor = '#E3F2FD';
-            msgDiv.style.direction = 'ltr';
-            text.style.textAlign = 'left';
+        if (isUser) {
+            msgDiv.style.backgroundColor = '#f8fafc';
+            msgDiv.style.marginRight = '40px';
+            msgDiv.style.borderRight = '4px solid #2563eb';
+            text.style.textAlign = 'right';
         } else {
-            msgDiv.style.backgroundColor = '#F1F1F1';
-            msgDiv.style.direction = 'rtl';
+            msgDiv.style.backgroundColor = '#f0fdf4';
+            msgDiv.style.marginLeft = '40px';
+            msgDiv.style.borderLeft = '4px solid #059669';
             text.style.textAlign = 'right';
         }
         
@@ -109,30 +141,47 @@ export class ExportModalComponent {
     document.body.appendChild(printContainer);
 
     try {
-        const canvas = await html2canvas(printContainer, { scale: 2, useCORS: true });
-        const imgData = canvas.toDataURL('image/png');
+        // Use a small delay to ensure fonts are rendered
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const canvas = await html2canvas(printContainer, { 
+          scale: 1.5, // Reduced scale for faster processing of long chats
+          useCORS: true,
+          logging: false
+        });
+        
+        const imgData = canvas.toDataURL('image/jpeg', 0.8); // Use JPEG with compression for smaller size
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const imgProps = pdf.getImageProperties(imgData);
-        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        let heightLeft = pdfHeight;
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+        const ratio = pdfWidth / imgWidth;
+        const finalImgHeight = imgHeight * ratio;
+        
+        let heightLeft = finalImgHeight;
         let position = 0;
 
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pdf.internal.pageSize.getHeight();
+        // First page
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, finalImgHeight);
+        heightLeft -= pdfHeight;
 
+        // Subsequent pages
         while (heightLeft > 0) {
-            position = heightLeft - pdfHeight;
+            position = heightLeft - finalImgHeight;
             pdf.addPage();
-            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-            heightLeft -= pdf.internal.pageSize.getHeight();
+            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, finalImgHeight);
+            heightLeft -= pdfHeight;
         }
         
         pdf.save(`Aman-Chat-${new Date().toISOString().slice(0,10)}.pdf`);
+        this.close.emit();
     } catch (e) {
         console.error("Error generating PDF", e);
     } finally {
         document.body.removeChild(printContainer);
+        this.isExporting.set(false);
     }
   }
 
@@ -140,10 +189,7 @@ export class ExportModalComponent {
     this.close.emit();
     if (this.messages().length === 0) return;
 
-    const { Document, Packer, Paragraph, TextRun, AlignmentType, ShadingType } = await import('docx');
-    const { default: saveAs } = await import('file-saver');
-
-    const paragraphs: any[] = [
+    const paragraphs: Paragraph[] = [
       new Paragraph({
         children: [new TextRun({ text: 'Aman AI Chat Export', bold: true, size: 32 })],
         alignment: AlignmentType.CENTER,

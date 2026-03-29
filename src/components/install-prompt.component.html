@@ -1,20 +1,46 @@
-<div class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm fade-in">
-  <div class="bg-white dark:bg-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-gray-100 dark:border-slate-700 relative animate-slide-up">
-     <div class="flex flex-col items-center text-center">
-        <div class="w-16 h-16 bg-slate-900 dark:bg-white rounded-2xl flex items-center justify-center shadow-lg mb-4 text-white dark:text-slate-900">
-           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-8 h-8">
-             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-           </svg>
-        </div>
-        <h3 class="text-xl font-bold mb-2 dark:text-white">{{ t().installApp }}</h3>
-        <p class="text-sm opacity-70 mb-6 dark:text-gray-300 leading-relaxed">{{ t().installDesc }}</p>
-        
-        <button (click)="installPwa.emit()" class="w-full py-3.5 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-gray-100 text-white rounded-xl font-bold mb-3 transition-colors shadow-lg shadow-slate-900/10 dark:shadow-white/5">
-          {{ t().install }}
+<div class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm transition-opacity duration-300 fade-in">
+  <!-- Modal Container -->
+  <div class="w-full sm:max-w-sm bg-white dark:bg-slate-900 rounded-t-[2rem] sm:rounded-3xl shadow-2xl border-t sm:border border-slate-100 dark:border-slate-800 relative overflow-hidden animate-slide-up">
+    
+    <!-- Decorative Header Background -->
+    <div class="absolute top-0 left-0 right-0 h-32 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 dark:from-indigo-500/20 dark:via-purple-500/20 dark:to-pink-500/20"></div>
+
+    <!-- Close Button -->
+    <button (click)="dismissInstall.emit()" class="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700 backdrop-blur-md transition-colors text-slate-500 dark:text-slate-400">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+
+    <div class="relative pt-8 pb-8 px-6 flex flex-col items-center text-center">
+      <!-- App Icon -->
+      <div class="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-[1.5rem] flex items-center justify-center shadow-xl shadow-indigo-500/20 mb-5 relative">
+        <div class="absolute inset-0 bg-white/20 rounded-[1.5rem] backdrop-blur-sm"></div>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10 text-white relative z-10">
+          <path fill-rule="evenodd" d="M9 4.5a.75.75 0 0 1 .721.544l.813 2.846a3.75 3.75 0 0 0 2.576 2.576l2.846.813a.75.75 0 0 1 0 1.442l-2.846.813a3.75 3.75 0 0 0-2.576 2.576l-.813 2.846a.75.75 0 0 1-1.442 0l-.813-2.846a3.75 3.75 0 0 0-2.576-2.576l-2.846-.813a.75.75 0 0 1 0-1.442l2.846-.813A3.75 3.75 0 0 0 7.466 7.89l.813-2.846A.75.75 0 0 1 9 4.5ZM18 1.5a.75.75 0 0 1 .728.568l.258 1.036c.236.94.97 1.674 1.91 1.91l1.036.258a.75.75 0 0 1 0 1.456l-1.036.258c-.94.236-1.674.97-1.91 1.91l-.258 1.036a.75.75 0 0 1-1.456 0l-.258-1.036a2.625 2.625 0 0 0-1.91-1.91l-1.036-.258a.75.75 0 0 1 0-1.456l1.036-.258a2.625 2.625 0 0 0 1.91-1.91l.258-1.036A.75.75 0 0 1 18 1.5ZM16.5 15a.75.75 0 0 1 .712.513l.394 1.183c.15.447.5.799.948.948l1.183.395a.75.75 0 0 1 0 1.422l-1.183.395c-.447.15-.799.5-.948.948l-.395 1.183a.75.75 0 0 1-1.422 0l-.395-1.183a1.5 1.5 0 0 0-.948-.948l-1.183-.395a.75.75 0 0 1 0-1.422l1.183-.395c.447-.15.799-.5.948-.948l.395-1.183A.75.75 0 0 1 16.5 15Z" clip-rule="evenodd" />
+        </svg>
+      </div>
+
+      <!-- Text Content -->
+      <h3 class="text-2xl font-bold mb-2 text-slate-900 dark:text-white tracking-tight">
+        {{ translationService.t().installApp }}
+      </h3>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-8 leading-relaxed max-w-[260px]">
+        {{ translationService.t().installDesc }}
+      </p>
+      
+      <!-- Action Buttons -->
+      <div class="w-full flex flex-col gap-3">
+        <button (click)="installPwa.emit()" class="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-2xl font-bold text-[15px] transition-all shadow-lg shadow-indigo-500/25 active:scale-[0.98] flex items-center justify-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          {{ translationService.t().install }}
         </button>
-        <button (click)="dismissInstall.emit()" class="w-full py-2.5 text-sm font-bold opacity-50 hover:opacity-100 dark:text-white transition-opacity">
-          {{ t().later }}
+        <button (click)="dismissInstall.emit()" class="w-full py-3 text-[14px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
+          {{ translationService.t().later }}
         </button>
-     </div>
+      </div>
+    </div>
   </div>
 </div>

@@ -4,7 +4,7 @@ window.Buffer = Buffer;
 
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { AppComponent } from './src/app.component';
+import { AppComponent } from './app.component';
 
 const preBootstrap = () => {
   const sanitize = (storage: Storage, storageName: string) => {

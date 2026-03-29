@@ -1,91 +1,55 @@
-<footer class="flex-none z-30 pt-2 px-4 pb-4 border-t transition-all duration-300 ease-in-out relative"
-        [class.bg-white]="theme() === 'light'"
-        [class.border-gray-200]="theme() === 'light'"
-        [class.bg-slate-900]="theme() === 'dark'"
-        [class.border-slate-800]="theme() === 'dark'">
-  <div class="max-w-3xl mx-auto">
+<footer class="flex-none z-30 pt-4 px-4 pb-6 transition-all duration-300 ease-in-out relative backdrop-blur-md"
+        [class.bg-white/80]="theme() === 'light'"
+        [class.bg-[#0a0a0a]/80]="theme() === 'dark'"
+        [class.border-t]="true"
+        [class.border-slate-100]="theme() === 'light'"
+        [class.border-slate-800/50]="theme() === 'dark'"
+        [dir]="currentLang() === 'ar' ? 'rtl' : 'ltr'">
+  <div class="max-w-3xl mx-auto space-y-4">
     
-    @if (selectedFile(); as file) {
-      <div class="mx-2 mb-2 border rounded-xl p-3 flex items-center gap-3 shadow-lg w-fit animate-slide-up relative z-40"
-           [class.bg-white]="theme() === 'light'"
-           [class.border-gray-200]="theme() === 'light'"
-           [class.bg-slate-800]="theme() === 'dark'"
-           [class.border-slate-700]="theme() === 'dark'"
-      >
-        @if (file.previewUrl) {
-          <img [src]="file.previewUrl" alt="Preview" class="w-10 h-10 rounded-lg object-cover">
-         } @else {
-           <div class="w-10 h-10 rounded-lg flex items-center justify-center text-blue-600 bg-blue-50 dark:bg-blue-900/30">
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
-               <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-             </svg>
-           </div>
-         }
-        <div class="flex flex-col">
-          <span class="text-sm font-bold truncate max-w-[120px]">{{file.name}}</span>
-          <span class="text-[10px] opacity-60 uppercase">{{file.mimeType}}</span>
-        </div>
-        <button (click)="clearFile.emit()" class="p-1 rounded-full hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/50 bg-gray-100 dark:bg-slate-700">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-          </svg>
-        </button>
+    <!-- SELECTED FILES PREVIEW -->
+    @if (selectedFiles().length > 0) {
+      <div class="flex items-center gap-3 overflow-x-auto no-scrollbar pb-3 px-1 animate-slide-up">
+        @for (file of selectedFiles(); track $index) {
+          <div class="flex-none w-28 h-28 relative group rounded-2xl overflow-hidden border shadow-sm transition-all hover:shadow-md"
+               [class.bg-white]="theme() === 'light'"
+               [class.border-slate-200]="theme() === 'light'"
+               [class.bg-slate-800]="theme() === 'dark'"
+               [class.border-slate-700]="theme() === 'dark'"
+          >
+            @if (file.previewUrl) {
+              <img [src]="file.previewUrl" alt="Preview" class="w-full h-full object-cover" referrerpolicy="no-referrer">
+            } @else {
+              <div class="w-full h-full flex flex-col items-center justify-center gap-2 p-2 text-center">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30">
+                  <mat-icon>insert_drive_file</mat-icon>
+                </div>
+                <span class="text-[10px] font-bold truncate w-full px-1">{{file.name}}</span>
+              </div>
+            }
+            
+            <!-- Overlay Info -->
+            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <button (click)="removeFile.emit($index)" class="p-2 rounded-full bg-red-500 text-white shadow-lg transform scale-75 group-hover:scale-100 transition-transform hover:bg-red-600">
+                <mat-icon class="text-sm">close</mat-icon>
+              </button>
+            </div>
+
+            <!-- Mime Type Badge -->
+            <div class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[8px] font-black uppercase tracking-wider backdrop-blur-sm">
+              {{file.mimeType.split('/')[1] || 'FILE'}}
+            </div>
+          </div>
+        }
+        
+        <!-- Clear All Button -->
+        @if (selectedFiles().length > 1) {
+          <button (click)="clearFiles.emit()" class="flex-none h-28 w-12 flex items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-200 transition-all group">
+            <mat-icon class="text-slate-400 group-hover:text-red-500 transition-colors">delete_sweep</mat-icon>
+          </button>
+        }
       </div>
     }
-
-    <!-- FEATURE CHIPS ROW -->
-    <div class="flex items-center gap-2 overflow-x-auto no-scrollbar px-1 mb-2 mask-fade-edges py-1">
-      <!-- Model Selector Chip -->
-      <div class="relative flex-shrink-0">
-        <button (click)="toggleInputModelMenu.emit()"
-                class="h-8 px-3 rounded-full text-[11px] font-bold flex items-center gap-1.5 transition-all border shadow-sm"
-                [class.bg-white]="theme() === 'light'"
-                [class.text-slate-700]="theme() === 'light'"
-                [class.border-gray-200]="theme() === 'light'"
-                [class.bg-slate-800]="theme() === 'dark'"
-                [class.text-slate-200]="theme() === 'dark'"
-                [class.border-slate-700]="theme() === 'dark'">
-          <div class="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-          <span class="whitespace-nowrap">{{ currentModelLabel() }}</span>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor" class="w-2.5 h-2.5 opacity-40">
-            <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-          </svg>
-        </button>
-      </div>
-
-      <!-- Web Search Chip -->
-      <button (click)="toggleWebSearch.emit()"
-              class="h-8 w-8 sm:w-auto sm:px-3 rounded-full text-[11px] font-bold flex items-center justify-center sm:gap-1.5 transition-all border flex-shrink-0"
-              [class.bg-blue-50]="useWebSearch() && theme() === 'light'" [class.text-blue-600]="useWebSearch() && theme() === 'light'" [class.border-blue-200]="useWebSearch() && theme() === 'light'"
-              [class.bg-blue-900/30]="useWebSearch() && theme() === 'dark'" [class.text-blue-300]="useWebSearch() && theme() === 'dark'" [class.border-blue-800]="useWebSearch() && theme() === 'dark'"
-              [class.bg-white]="!useWebSearch() && theme() === 'light'" [class.text-slate-500]="!useWebSearch() && theme() === 'light'" [class.border-gray-200]="!useWebSearch() && theme() === 'light'"
-              [class.bg-slate-800]="!useWebSearch() && theme() === 'dark'" [class.text-slate-400]="!useWebSearch() && theme() === 'dark'" [class.border-slate-700]="!useWebSearch() && theme() === 'dark'">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 sm:w-3.5 sm:h-3.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
-        </svg>
-        <span class="whitespace-nowrap hidden sm:inline">{{ t().webSearch }}</span>
-      </button>
-
-      <!-- Image Gen Chip -->
-      <button (click)="toggleGenerateImage.emit()"
-              class="h-8 w-8 sm:w-auto sm:px-3 rounded-full text-[11px] font-bold flex items-center justify-center sm:gap-1.5 transition-all border flex-shrink-0"
-              [class.bg-purple-50]="generateImage() && theme() === 'light'" [class.text-purple-600]="generateImage() && theme() === 'light'" [class.border-purple-200]="generateImage() && theme() === 'light'"
-              [class.bg-purple-900/30]="generateImage() && theme() === 'dark'" [class.text-purple-300]="generateImage() && theme() === 'dark'" [class.border-purple-800]="generateImage() && theme() === 'dark'"
-              [class.bg-white]="!generateImage() && theme() === 'light'" [class.text-slate-500]="!generateImage() && theme() === 'light'" [class.border-gray-200]="!generateImage() && theme() === 'light'"
-              [class.bg-slate-800]="!generateImage() && theme() === 'dark'" [class.text-slate-400]="!generateImage() && theme() === 'dark'" [class.border-slate-700]="!generateImage() && theme() === 'dark'">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 sm:w-3.5 sm:h-3.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09l2.846.813-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
-        </svg>
-        <span class="whitespace-nowrap hidden sm:inline">{{ t().generateImage }}</span>
-      </button>
-
-      <!-- Live Chat Chip -->
-      <button (click)="openLiveView.emit()" 
-              class="h-8 w-8 sm:w-auto sm:px-3 rounded-full text-[11px] font-bold flex items-center justify-center sm:gap-1.5 transition-all border flex-shrink-0 bg-red-50 text-red-600 border-red-100 dark:bg-red-900/20 dark:text-red-300 dark:border-red-900/50">
-        <div class="w-2 h-2 sm:w-1.5 sm:h-1.5 rounded-full bg-red-500 animate-pulse"></div>
-        <span class="whitespace-nowrap hidden sm:inline">{{ t().liveChat }}</span>
-      </button>
-    </div>
 
     <!-- LIMIT EXCEEDED WARNING -->
     @if (isLimitExceeded()) {
@@ -105,108 +69,186 @@
       </div>
     }
 
-    <!-- MAIN INPUT PILL -->
-    <div class="relative flex items-end gap-2 bg-white dark:bg-slate-800 rounded-[32px] p-1.5 shadow-lg border border-gray-100 dark:border-slate-700 transition-all focus-within:ring-2 focus-within:ring-blue-500/20"
-         [class.opacity-50]="isLimitExceeded()" [class.pointer-events-none]="isLimitExceeded()">
+    <!-- Input Container -->
+    <div class="relative group" [class.opacity-50]="isLimitExceeded()" [class.pointer-events-none]="isLimitExceeded()">
+      <div class="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-[2rem] blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity"></div>
       
-      <!-- Left Actions Wrapper -->
-      <div class="flex items-center gap-1 order-1 rtl:order-3 h-10">
-        <!-- Upload Button -->
-        <button (click)="triggerFileUpload.emit()"
-                class="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors text-slate-400">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-        </button>
+      <div class="relative flex flex-col rounded-[1.5rem] border transition-all duration-300 shadow-sm group-focus-within:shadow-xl group-focus-within:ring-4 group-focus-within:ring-indigo-500/5"
+           [class.bg-white]="theme() === 'light'"
+           [class.border-slate-200]="theme() === 'light'"
+           [class.bg-slate-900/80]="theme() === 'dark'"
+           [class.border-slate-800]="theme() === 'dark'"
+           [class.group-focus-within:border-indigo-500/50]="true">
+        
+        <!-- Feature Chips -->
+        <div class="flex items-center justify-between p-2 sm:p-3 border-b border-slate-100 dark:border-slate-800/50">
+          <!-- Model Selector -->
+          <button (click)="toggleInputModelMenu.emit()"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all border hover:shadow-sm active:scale-95"
+                  [class.bg-indigo-50]="theme() === 'light'"
+                  [class.text-indigo-600]="theme() === 'light'"
+                  [class.border-indigo-100]="theme() === 'light'"
+                  [class.bg-indigo-900/20]="theme() === 'dark'"
+                  [class.text-indigo-300]="theme() === 'dark'"
+                  [class.border-indigo-900/50]="theme() === 'dark'">
+            <div class="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
+            <span class="whitespace-nowrap">{{ currentModelLabel() }}</span>
+            <mat-icon class="text-xs opacity-40">expand_more</mat-icon>
+          </button>
 
-        <!-- Usage Indicator (Free/Pro Users Only) -->
-        @if (authService.userPlan() !== 'premium' && authService.user()) {
-          <div class="relative group flex items-center justify-center w-6 h-6 flex-shrink-0 cursor-help outline-none mx-1" tabindex="0">
-            <!-- Circular Progress -->
-            <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-              <!-- Background Circle -->
-              <path class="text-gray-200 dark:text-slate-700" 
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    stroke-width="5" />
-              <!-- Progress Circle -->
-              <path class="text-black dark:text-white transition-all duration-500 ease-out" 
-                    [attr.stroke-dasharray]="usagePercentage() + ', 100'" 
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    stroke-width="5" 
-                    stroke-linecap="round" />
-            </svg>
-            
-            <!-- Tooltip -->
-            <div class="absolute bottom-full mb-3 left-0 sm:left-1/2 sm:-translate-x-1/2 w-40 sm:w-48 p-2.5 sm:p-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] sm:text-[11px] rounded-xl shadow-xl opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity z-50 flex flex-col gap-0.5 sm:gap-1 text-center pointer-events-none">
-              <span class="font-black">{{ t().dailyLimit }}</span>
-              <div class="w-full h-1 bg-white/20 dark:bg-black/10 rounded-full overflow-hidden my-0.5 sm:my-1">
-                <div class="h-full bg-blue-500 rounded-full transition-all duration-500" [style.width.%]="usagePercentage()"></div>
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <!-- Web Search Toggle -->
+            <button (click)="toggleWebSearch.emit()"
+                    class="flex items-center justify-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-bold transition-all border hover:shadow-sm active:scale-95"
+                    [class.bg-emerald-50]="useWebSearch() && theme() === 'light'"
+                  [class.text-emerald-600]="useWebSearch() && theme() === 'light'"
+                  [class.border-emerald-100]="useWebSearch() && theme() === 'light'"
+                  [class.bg-emerald-900/20]="useWebSearch() && theme() === 'dark'"
+                  [class.text-emerald-300]="useWebSearch() && theme() === 'dark'"
+                  [class.border-emerald-900/50]="useWebSearch() && theme() === 'dark'"
+                  [class.bg-slate-50]="!useWebSearch() && theme() === 'light'"
+                  [class.text-slate-500]="!useWebSearch() && theme() === 'light'"
+                  [class.border-slate-200]="!useWebSearch() && theme() === 'light'"
+                  [class.bg-slate-800/50]="!useWebSearch() && theme() === 'dark'"
+                  [class.text-slate-400]="!useWebSearch() && theme() === 'dark'"
+                  [class.border-slate-800]="!useWebSearch() && theme() === 'dark'">
+              <mat-icon class="text-sm">language</mat-icon>
+              <span class="hidden sm:inline whitespace-nowrap">{{ t().webSearch }}</span>
+            </button>
+
+            <!-- Image Gen Toggle -->
+            <button (click)="toggleGenerateImage.emit()"
+                    class="flex items-center justify-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-bold transition-all border hover:shadow-sm active:scale-95"
+                    [class.bg-purple-50]="generateImage() && theme() === 'light'"
+                  [class.text-purple-600]="generateImage() && theme() === 'light'"
+                  [class.border-purple-100]="generateImage() && theme() === 'light'"
+                  [class.bg-purple-900/20]="generateImage() && theme() === 'dark'"
+                  [class.text-purple-300]="generateImage() && theme() === 'dark'"
+                  [class.border-purple-900/50]="generateImage() && theme() === 'dark'"
+                  [class.bg-slate-50]="!generateImage() && theme() === 'light'"
+                  [class.text-slate-500]="!generateImage() && theme() === 'light'"
+                  [class.border-slate-200]="!generateImage() && theme() === 'light'"
+                  [class.bg-slate-800/50]="!generateImage() && theme() === 'dark'"
+                  [class.text-slate-400]="!generateImage() && theme() === 'dark'"
+                  [class.border-slate-800]="!generateImage() && theme() === 'dark'">
+              <mat-icon class="text-sm">palette</mat-icon>
+              <span class="hidden sm:inline whitespace-nowrap">{{ t().generateImage }}</span>
+            </button>
+
+            <!-- Live View Toggle -->
+            <button (click)="openLiveView.emit()"
+                    class="flex items-center justify-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-bold transition-all border hover:shadow-sm active:scale-95 flex-shrink-0"
+                    [class.bg-red-50]="theme() === 'light'"
+                  [class.text-red-600]="theme() === 'light'"
+                  [class.border-red-100]="theme() === 'light'"
+                  [class.bg-red-900/20]="theme() === 'dark'"
+                  [class.text-red-300]="theme() === 'dark'"
+                  [class.border-red-900/50]="theme() === 'dark'">
+              <div class="relative flex items-center justify-center">
+                <mat-icon class="text-sm">graphic_eq</mat-icon>
+                <div class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
               </div>
-              <div class="flex items-center justify-center gap-1 font-black">
-                <span>{{ authService.dailyUsage() | number }}</span>
-                <span class="opacity-40">/</span>
-                <span>{{ authService.dailyLimit() | number }}</span>
-              </div>
-              @if (usagePercentage() >= 90) {
-                <span class="text-red-400 dark:text-red-600 font-black mt-0.5">{{ t().limitNear }}</span>
-              }
-              <!-- Arrow -->
-              <div class="absolute top-full left-2 sm:left-1/2 sm:-translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-white"></div>
-            </div>
+              <span class="hidden sm:inline whitespace-nowrap">{{ t().liveChat }}</span>
+            </button>
           </div>
-        }
-      </div>
-      <input #fileInput type="file" (change)="onFileSelected.emit($event)" class="hidden" accept=".pdf,.csv,.txt,.jpg,.jpeg,.png,.webp,.JPG,.JPEG,.PNG,.WEBP,.doc,.docx,.xls,.xlsx" />
 
-      <!-- Textarea -->
-      <textarea
-        #textarea
-        [value]="inputMessage()"
-        (input)="updateInput.emit($event)"
-        (keydown)="handleKeydown.emit($event)"
-        rows="1"
-        [placeholder]="isListening() ? t().listening : t().placeholder"
-        class="flex-1 bg-transparent placeholder-slate-400 dark:placeholder-slate-500 py-2.5 px-1 focus:outline-none resize-none overflow-hidden min-h-[40px] max-h-[160px] leading-6 text-[15px] text-slate-800 dark:text-white font-medium order-2"
-      ></textarea>
+          <!-- Usage Indicator (Free/Pro Users Only) -->
+          @if (authService.userPlan() !== 'premium' && authService.user()) {
+            <div class="relative group flex items-center justify-center w-6 h-6 flex-shrink-0 cursor-help outline-none mx-1" tabindex="0">
+              <!-- Circular Progress -->
+              <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                <!-- Background Circle -->
+                <path class="text-gray-200 dark:text-slate-700" 
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      stroke-width="5" />
+                <!-- Progress Circle -->
+                <path class="text-black dark:text-white transition-all duration-500 ease-out" 
+                      [attr.stroke-dasharray]="usagePercentage() + ', 100'" 
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      stroke-width="5" 
+                      stroke-linecap="round" />
+              </svg>
+              
+              <!-- Tooltip -->
+              <div class="absolute bottom-full mb-3 start-0 sm:left-1/2 sm:-translate-x-1/2 w-40 sm:w-48 max-w-[calc(100vw-3rem)] p-2.5 sm:p-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] sm:text-[11px] rounded-xl shadow-xl opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity z-50 flex flex-col gap-0.5 sm:gap-1 text-center pointer-events-none">
+                <span class="font-black">{{ t().dailyLimit }}</span>
+                <div class="w-full h-1 bg-white/20 dark:bg-black/10 rounded-full overflow-hidden my-0.5 sm:my-1">
+                  <div class="h-full bg-blue-500 rounded-full transition-all duration-500" [style.width.%]="usagePercentage()"></div>
+                </div>
+                <div class="flex items-center justify-center gap-1 font-black">
+                  <span>{{ authService.dailyUsage() | number }}</span>
+                  <span class="opacity-40">/</span>
+                  <span>{{ authService.dailyLimit() | number }}</span>
+                </div>
+                @if (usagePercentage() >= 90) {
+                  <span class="text-red-400 dark:text-red-600 font-black mt-0.5">{{ t().limitNear }}</span>
+                }
+                <!-- Arrow -->
+                <div class="absolute top-full start-2 sm:left-1/2 sm:-translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-white"></div>
+              </div>
+            </div>
+          }
+        </div>
 
-      <!-- Right Actions (Voice/Send) -->
-      <div class="flex items-center gap-1 pr-1 order-3 rtl:order-1">
-        <!-- Voice Input -->
-        <button (click)="startVoiceInput.emit()" 
-                class="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full transition-all"
-                [class.bg-red-500]="isListening()" [class.text-white]="isListening()" [class.animate-pulse]="isListening()"
-                [class.text-slate-400]="!isListening()">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-          </svg>
-        </button>
-
-        @if (isLoading()) {
-          <!-- Stop Button -->
-          <button (click)="stopGeneration.emit()"
-                  class="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all active:scale-90">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
-              <rect x="6" y="6" width="12" height="12" rx="2" />
-            </svg>
+        <!-- Textarea & Actions -->
+        <div class="flex items-end gap-2 p-3">
+          <button (click)="fileInput.click()" 
+                  class="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-500 active:scale-90"
+                  [title]="t().upload">
+            <mat-icon>attach_file</mat-icon>
+            <input #fileInput type="file" multiple class="hidden" (change)="onFileSelectedHandler($event)" accept=".pdf,.csv,.txt,.jpg,.jpeg,.png,.webp,.JPG,.JPEG,.PNG,.WEBP,.doc,.docx,.xls,.xlsx">
           </button>
-        } @else if (inputMessage() || selectedFile()) {
-          <!-- Send Button -->
-          <button (click)="sendMessage.emit()"
-                  class="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-900 transition-all shadow-md active:scale-95">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
-              <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
-            </svg>
-          </button>
-        }
+
+          <textarea #chatTextarea
+            [placeholder]="isListening() ? t().listening : t().placeholder"
+            [value]="inputValue()"
+            (input)="onInput($event)"
+            (keydown)="onKeyDown($event)"
+            rows="1"
+            class="flex-1 bg-transparent border-none focus:ring-0 text-sm sm:text-base py-2.5 resize-none max-h-48 overflow-y-auto placeholder:text-slate-400 dark:text-white no-scrollbar leading-relaxed"
+            dir="auto"
+          ></textarea>
+
+          <div class="flex items-center gap-1.5">
+            <button (click)="onToggleVoice()" 
+                    class="p-2.5 rounded-xl transition-all active:scale-90"
+                    [class.bg-red-500]="isListening()"
+                    [class.text-white]="isListening()"
+                    [class.text-slate-500]="!isListening()"
+                    [class.hover:bg-slate-100]="!isListening()"
+                    [class.dark:hover:bg-slate-800]="!isListening()"
+                    [class.animate-pulse]="isListening()">
+              <mat-icon>{{ isListening() ? 'mic' : 'mic_none' }}</mat-icon>
+            </button>
+
+            @if (isLoading() || isSending()) {
+              <!-- Stop Button -->
+              <button (click)="stopGeneration.emit()"
+                      class="p-2.5 rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all active:scale-90 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+              </button>
+            } @else {
+              <!-- Send Button -->
+              <button (click)="onSendMessage()" 
+                      [disabled]="!inputValue().trim() && selectedFiles().length === 0"
+                      class="p-2.5 rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 disabled:opacity-30 disabled:shadow-none transition-all active:scale-90 flex items-center justify-center">
+                <mat-icon class="text-xl">send</mat-icon>
+              </button>
+            }
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="text-center mt-3 hidden sm:block">
-       <p class="text-[10px] opacity-40">{{ t().disclaimer }}</p>
-    </div>
+    <!-- Footer Info -->
+    <p class="text-[10px] text-center text-slate-400 px-4">
+      {{ t().disclaimer }}
+    </p>
   </div>
 </footer>

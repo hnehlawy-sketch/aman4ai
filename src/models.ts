@@ -1,4 +1,5 @@
-import { ChatMessage } from './services/gemini.service';
+import type { ChatMessage } from './services/gemini.service';
+export type { ChatMessage };
 
 export interface ChatSession {
   id: string;

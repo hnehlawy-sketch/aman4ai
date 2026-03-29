@@ -1,29 +1,43 @@
-import { Injectable, signal, inject } from '@angular/core';
+import { Injectable, signal, inject, computed } from '@angular/core';
 import { UserProfile, PaymentRequest, SystemSettings, OperationType, FirestoreErrorInfo } from '../models';
 import { StorageService } from './storage.service';
 
 // Use a simpler, more standard import for Firebase compat.
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signOut, updateEmail, sendPasswordResetEmail } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, collection, limit, getDocs, getDocsFromServer, writeBatch, addDoc, where, query, updateDoc, deleteDoc, enableMultiTabIndexedDbPersistence, orderBy, deleteField } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, collection, limit, getDocs, getDocsFromServer, getDocFromServer, writeBatch, addDoc, where, query, updateDoc, deleteDoc, enableMultiTabIndexedDbPersistence, orderBy, deleteField, initializeFirestore } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { User } from 'firebase/auth';
 
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBHuDsfjLV-F8LxPzk_BZ30Fc2vl3M_fqg",
-  authDomain: "studio-772832865-33905.firebaseapp.com",
-  projectId: "studio-772832865-33905",
-  storageBucket: "studio-772832865-33905.firebasestorage.app",
-  messagingSenderId: "585654670642",
-  appId: "1:585654670642:web:fd0b505485b03042e0332b"
-};
+import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase once at module level
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
+// Use the database ID from config, defaulting to '(default)' if not specified
+const dbId = (firebaseConfig as any).firestoreDatabaseId || '(default)';
+
+// Initialize Firestore with long polling to bypass potential proxy/iframe streaming issues
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, dbId);
+
 const storage = getStorage(app);
+
+// Enable persistence for better offline experience - handle errors gracefully
+// In some environments (like iframes), persistence might fail or be unavailable
+if (typeof window !== 'undefined' && window.indexedDB) {
+  enableMultiTabIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn('Firestore persistence failed: multiple tabs open');
+    } else if (err.code === 'unimplemented') {
+      console.warn('Firestore persistence failed: browser not supported');
+    } else {
+      console.warn('Firestore persistence failed:', err.message);
+    }
+  });
+}
 
 import { DataLoggingService } from './data-logging.service';
 
@@ -41,19 +55,26 @@ export class AuthService {
   userProfile = signal<UserProfile | null>(null);
   isPremium = signal<boolean>(false);
   userPlan = signal<'free' | 'pro' | 'premium'>('free');
-  isAdmin = signal<boolean>(false);
+  isEmailVerified = signal<boolean>(false);
   isLoading = signal<boolean>(true);
   dailyUsage = signal<number>(0);
   dailyLimit = signal<number>(60000);
   systemSettings = signal<SystemSettings | null>(null);
+  pricing = signal<any>(null);
+  
+  isFirestoreAvailable = signal<boolean>(true);
   
   private storageService = inject(StorageService);
 
   constructor() {
-    // 3. Set up Auth Listener
+    // 1. Test connection
+    this.testConnection();
+
+    // 2. Set up Auth Listener
     onAuthStateChanged(this.auth, async (user) => {
       this.user.set(user);
       if (user) {
+        this.isEmailVerified.set(user.emailVerified);
         try {
           await this.syncUserToDB(user);
         } catch (e) {
@@ -61,12 +82,55 @@ export class AuthService {
         }
       } else {
         this.isPremium.set(false);
-        this.isAdmin.set(false);
+        this.isEmailVerified.set(false);
         // Clear local storage when user logs out to prevent cross-user data leakage
         this.storageService.clearAllSessions().catch(err => console.error('Failed to clear sessions on logout', err));
       }
       this.isLoading.set(false);
     });
+
+    // 3. Load System Settings and Pricing immediately (for guests too)
+    this.initBaseSettings();
+  }
+
+  private async initBaseSettings() {
+    console.log('[AuthService] Starting base settings initialization...');
+    try {
+      // Use Promise.allSettled to ensure one failure doesn't block the other
+      const results = await Promise.allSettled([
+        this.loadSystemSettings(),
+        this.getPricing().then(p => {
+          console.log('[AuthService] Pricing fetched successfully:', !!p);
+          this.pricing.set(p);
+        })
+      ]);
+      
+      results.forEach((res, idx) => {
+        if (res.status === 'rejected') {
+          console.error(`[AuthService] Initialization task ${idx} failed:`, res.reason);
+        }
+      });
+      
+      console.log('[AuthService] Base settings initialization completed');
+    } catch (e) {
+      console.error('[AuthService] Critical failure in initBaseSettings:', e);
+    }
+  }
+
+  private async testConnection() {
+    try {
+      await getDoc(doc(this.db, 'test', 'connection'));
+      console.log('[AuthService] Firestore connection test successful');
+      this.isFirestoreAvailable.set(true);
+    } catch (error: any) {
+      if (error.message?.includes('the client is offline') || error.code === 'unavailable' || error.code === 'failed-precondition') {
+        console.error("[AuthService] Firestore connection failed: client is offline or service unavailable.");
+        this.isFirestoreAvailable.set(false);
+      } else {
+        // Other errors (like permission denied) might still mean the service is reachable
+        this.isFirestoreAvailable.set(true);
+      }
+    }
   }
 
   // --- Email/Password Login ---
@@ -147,7 +211,6 @@ export class AuthService {
     
     // Reset user status
     this.isPremium.set(false);
-    this.isAdmin.set(false);
     this.userPlan.set('free');
   }
 
@@ -215,44 +278,25 @@ export class AuthService {
       const uid = user.uid;
       const docRef = doc(this.db, 'users', uid);
       
-      const adminEmails = ['admin@aman-ai.com', 'h.nehlawy@gmail.com', 'queeeensila@gmail.com'];
-      const shouldBeAdminByEmail = user.email ? adminEmails.includes(user.email) : false;
+      console.log(`[AuthService] Syncing user ${uid} (${user.email}).`);
 
-      console.log(`[AuthService] Syncing user ${uid} (${user.email}). Admin by email: ${shouldBeAdminByEmail}`);
-
-      // Optimistically set admin/premium if email matches
-      if (shouldBeAdminByEmail) {
-        this.isAdmin.set(true);
-        this.isPremium.set(true);
-      }
-      
       let docSnap;
       try {
         docSnap = await getDoc(docRef);
       } catch (e: any) {
-        console.warn('[AuthService] Firestore getDoc failed:', e.message);
-        // If we can't even get the doc, we can't sync. 
-        // But if we are an admin by email, we should still allow access to the UI
+        console.error('[AuthService] Firestore getDoc failed:', e.message);
         return;
       }
       
-      let isPremium = shouldBeAdminByEmail;
-      let isAdmin = shouldBeAdminByEmail;
-      let plan: 'free' | 'pro' | 'premium' = shouldBeAdminByEmail ? 'premium' : 'free';
+      let isPremium = false;
+      let plan: 'free' | 'pro' | 'premium' = 'free';
       
       if (docSnap && docSnap.exists()) {
         const data = docSnap.data();
-        isPremium = data?.['isPremium'] || shouldBeAdminByEmail;
-        isAdmin = data?.['isAdmin'] || shouldBeAdminByEmail;
+        isPremium = data?.['isPremium'] || false;
         plan = data?.['plan'] || (isPremium ? 'premium' : 'free');
         
-        console.log(`[AuthService] User exists in DB. Premium: ${isPremium}, Plan: ${plan}, Admin: ${isAdmin}`);
-
-        // Ensure email-based admins are always recognized in DB
-        if (shouldBeAdminByEmail && (!data?.['isAdmin'] || !data?.['isPremium'] || (data?.['plan'] !== 'premium' && data?.['plan'] !== 'pro'))) {
-          console.log('[AuthService] Updating admin status for email-based admin');
-          setDoc(docRef, { isAdmin: true, isPremium: true, plan: data?.['plan'] || 'premium' }, { merge: true }).catch(err => console.warn('Failed to update admin status:', err.message));
-        }
+        console.log(`[AuthService] User exists in DB. Premium: ${isPremium}, Plan: ${plan}`);
 
         // Update last login and profile info
         setDoc(docRef, { 
@@ -265,22 +309,7 @@ export class AuthService {
         // Create new record
         console.log('[AuthService] Creating new user record');
         try {
-          // Check if first user WITHOUT querying the whole collection if possible
-          // If we are an admin by email, we don't need to check if we are the first user
-          let isFirstUser = false;
-          if (!shouldBeAdminByEmail) {
-            try {
-              const usersCollection = collection(this.db, 'users');
-              const firstUserQuery = query(usersCollection, limit(1));
-              const firstUserSnap = await getDocs(firstUserQuery);
-              isFirstUser = firstUserSnap.empty;
-            } catch (e) {
-              console.warn('[AuthService] Could not check if first user (permission?):', e);
-            }
-          }
-
-          const shouldBeAdmin = isFirstUser || shouldBeAdminByEmail;
-          plan = shouldBeAdmin ? 'premium' : 'free';
+          plan = 'free';
 
           await setDoc(docRef, { 
             uid: uid,
@@ -289,16 +318,14 @@ export class AuthService {
             photoURL: user.photoURL || null,
             createdAt: new Date().toISOString(),
             lastLogin: new Date().toISOString(),
-            isPremium: shouldBeAdmin,
+            isPremium: false,
             plan: plan,
-            isAdmin: shouldBeAdmin,
             dailyUsage: 0,
             usageDate: new Date().toDateString()
           });
-          isAdmin = shouldBeAdmin;
-          isPremium = shouldBeAdmin;
+          isPremium = false;
           this.dailyUsage.set(0);
-          console.log(`[AuthService] New user record created. Admin: ${isAdmin}`);
+          console.log(`[AuthService] New user record created. Premium: ${isPremium}`);
         } catch (e: any) {
           console.error('[AuthService] Failed to create user record:', e.message);
         }
@@ -306,7 +333,6 @@ export class AuthService {
       
       this.isPremium.set(isPremium);
       this.userPlan.set(plan);
-      this.isAdmin.set(isAdmin);
       
       // Set daily usage if available
       if (docSnap && docSnap.exists()) {
@@ -413,10 +439,6 @@ export class AuthService {
     return true;
   }
 
-  async updateUserDailyLimit(uid: string, limit: number | null) {
-    await updateDoc(doc(this.db, 'users', uid), { customDailyLimit: limit });
-  }
-
   async submitPaymentRequest(transactionId: string, receiptUrl?: string, planRequested: string = 'premium') {
     const user = this.user();
     if (!user) throw new Error('User not logged in');
@@ -437,51 +459,8 @@ export class AuthService {
     await addDoc(collection(this.db, 'payment_requests'), request);
   }
 
-  async getPendingPayments(): Promise<PaymentRequest[]> {
-    const paymentsCollection = collection(this.db, 'payment_requests');
-    const q = query(paymentsCollection, where('status', '==', 'pending'));
-    const snap = await getDocs(q);
-    
-    const requests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentRequest));
-    
-    // Sort manually on the client-side
-    return requests.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }
-
-  async approvePayment(request: PaymentRequest, barcodeFile?: File) {
-    if (!request.id) return;
-
-    const batch = writeBatch(this.db);
-    
-    // 1. Update request status
-    const requestRef = doc(this.db, 'payment_requests', request.id);
-
-    // Handle barcode upload if file is provided
-    if (barcodeFile) {
-      const barcodeRef = ref(this.storage, `barcodes/${request.uid}/${request.id}-${barcodeFile.name}`);
-      await uploadBytes(barcodeRef, barcodeFile);
-      const barcodeUrl = await getDownloadURL(barcodeRef);
-      batch.update(requestRef, { status: 'approved', barcodeUrl: barcodeUrl });
-    } else {
-      batch.update(requestRef, { status: 'approved' });
-    }
-
-    // 2. Update user premium status
-    const userRef = doc(this.db, 'users', request.uid);
-    const planToSet = request.planRequested ? request.planRequested.split(' - ')[0] : 'premium';
-    batch.update(userRef, { 
-      isPremium: true,
-      plan: planToSet
-    });
-
-    await batch.commit();
-  }
-
-  async rejectPayment(requestId: string) {
-    await updateDoc(doc(this.db, 'payment_requests', requestId), { status: 'rejected' });
-  }
-
   async forceSync() {
+    await this.testConnection();
     const user = this.auth.currentUser;
     if (user) {
       await this.syncUserToDB(user);
@@ -492,11 +471,14 @@ export class AuthService {
     try {
       const settingsRef = doc(this.db, 'settings', 'system');
       const snap = await getDoc(settingsRef);
+      
       if (snap.exists()) {
         const settings = snap.data() as SystemSettings;
         this.systemSettings.set(settings);
+        console.log('[AuthService] System settings loaded from Firestore');
         return settings;
       } else {
+        console.warn('[AuthService] System settings document not found, using defaults');
         // Default settings
         const defaults: SystemSettings = {
           models: {
@@ -512,23 +494,18 @@ export class AuthService {
             pro: 200000
           }
         };
-        // Only admins can create these, but we can set the signal locally
         this.systemSettings.set(defaults);
         return defaults;
       }
     } catch (e) {
-      console.warn('Failed to load system settings', e);
-      return this.systemSettings() || {
+      console.error('[AuthService] Failed to load system settings', e);
+      const defaults: SystemSettings = {
         models: { fast: '', core: '', pro: '', image: '', live: '', tts: '' },
         limits: { free: 60000, pro: 200000 }
       };
+      this.systemSettings.set(defaults);
+      return defaults;
     }
-  }
-
-  async updateSystemSettings(settings: SystemSettings) {
-    const settingsRef = doc(this.db, 'settings', 'system');
-    await setDoc(settingsRef, settings);
-    this.systemSettings.set(settings);
   }
 
   async uploadPaymentReceipt(uid: string, file: File): Promise<string> {
@@ -540,7 +517,8 @@ export class AuthService {
   // --- Payment Methods Management ---
   async getPaymentMethods(): Promise<any[]> {
     try {
-      const snap = await getDocs(collection(this.db, 'payment_methods'));
+      const colRef = collection(this.db, 'payment_methods');
+      const snap = await getDocs(colRef);
       return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (e: any) {
       console.warn('[AuthService] getPaymentMethods failed:', e.message);
@@ -551,70 +529,38 @@ export class AuthService {
   // --- Pricing Management ---
   async getPricing(): Promise<any> {
     try {
+      console.log('[AuthService] Fetching pricing from Firestore...');
       const docRef = doc(this.db, 'settings', 'pricing');
       const snap = await getDoc(docRef);
+      
+      let data: any;
       if (snap.exists()) {
-        return snap.data();
+        data = snap.data();
+        console.log('[AuthService] Pricing loaded successfully:', data);
+      } else {
+        console.warn('[AuthService] Pricing document does not exist at settings/pricing, using defaults');
+        data = {
+          pro: {
+            monthly: { usd: 7, syp: 820 },
+            yearly: { usd: 70, syp: 8200 }
+          },
+          premium: {
+            monthly: { usd: 13, syp: 1520 },
+            yearly: { usd: 130, syp: 15200 }
+          }
+        };
       }
-      // Default pricing if not set
-      return {
-        pro: {
-          monthly: { usd: 5, syp: 75000 },
-          yearly: { usd: 50, syp: 750000 }
-        },
-        premium: {
-          monthly: { usd: 10, syp: 150000 },
-          yearly: { usd: 100, syp: 1500000 }
-        }
-      };
+      this.pricing.set(data);
+      return data;
     } catch (e: any) {
-      console.warn('[AuthService] getPricing failed:', e.message);
-      return {
-        pro: { monthly: { usd: 5, syp: 75000 }, yearly: { usd: 50, syp: 750000 } },
-        premium: { monthly: { usd: 10, syp: 150000 }, yearly: { usd: 100, syp: 1500000 } }
+      console.error('[AuthService] getPricing critical error:', e.message);
+      const defaultData = {
+        pro: { monthly: { usd: 7, syp: 820 }, yearly: { usd: 70, syp: 8200 } },
+        premium: { monthly: { usd: 13, syp: 1520 }, yearly: { usd: 130, syp: 15200 } }
       };
+      this.pricing.set(defaultData);
+      return defaultData;
     }
-  }
-
-  async updatePricing(pricing: any) {
-    try {
-      const docRef = doc(this.db, 'settings', 'pricing');
-      await setDoc(docRef, pricing, { merge: true });
-    } catch (e: any) {
-      console.error('[AuthService] updatePricing failed:', e.message);
-      throw e;
-    }
-  }
-
-  async addPaymentMethod(method: any) {
-    console.log('Adding payment method:', method);
-    await addDoc(collection(this.db, 'payment_methods'), method);
-  }
-
-  async updatePaymentMethod(id: string, method: any) {
-    await updateDoc(doc(this.db, 'payment_methods', id), method);
-  }
-
-  async deletePaymentMethod(id: string) {
-    await deleteDoc(doc(this.db, 'payment_methods', id));
-  }
-
-  async uploadPaymentMethodQR(file: File): Promise<string> {
-    console.log('Uploading QR code:', file.name);
-    const fileRef = ref(this.storage, `admin/payment_methods/${Date.now()}-${file.name}`);
-    await uploadBytes(fileRef, file);
-    const url = await getDownloadURL(fileRef);
-    console.log('QR code uploaded, URL:', url);
-    return url;
-  }
-
-  async uploadPaymentMethodIcon(file: File): Promise<string> {
-    console.log('Uploading payment method icon:', file.name);
-    const fileRef = ref(this.storage, `admin/payment_icons/${Date.now()}-${file.name}`);
-    await uploadBytes(fileRef, file);
-    const url = await getDownloadURL(fileRef);
-    console.log('Icon uploaded, URL:', url);
-    return url;
   }
 
   // --- Storage Helpers ---

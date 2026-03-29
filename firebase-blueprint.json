@@ -10,7 +10,6 @@
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
         "mobile": { "type": "string" },
-        "isAdmin": { "type": "boolean" },
         "isPremium": { "type": "boolean" },
         "plan": { "type": "string", "enum": ["free", "pro", "premium"] },
         "lastLogin": { "type": "string", "format": "date-time" }
@@ -54,10 +53,17 @@
         "uid": { "type": "string" },
         "email": { "type": "string" },
         "transactionId": { "type": "string" },
-        "timestamp": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "receiptUrl": { "type": "string" },
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-        "planRequested": { "type": "string" }
-      }
+        "plan": { "type": "string", "enum": ["free", "pro", "premium"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "approvedAt": { "type": "string", "format": "date-time" },
+        "rejectedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "status", "plan"]
     },
     "PaymentMethod": {
       "title": "Payment Method",

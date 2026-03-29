@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "ng serve",
+    "dev": "ng serve --host 0.0.0.0 --port 3000 --allowed-hosts",
     "build": "ng build",
     "lint": "tsc --noEmit",
-    "preview": "ng serve --configuration=production"
+    "preview": "ng serve --host 0.0.0.0 --port 3000 --configuration=production --allowed-hosts"
   },
   "dependencies": {
     "@angular/build": "^21.1.0",
@@ -22,7 +22,9 @@
     "@angular/platform-browser": "^21.1.0",
     "@google/genai": "^1.42.0",
     "@google/generative-ai": "^0.24.1",
+    "@tailwindcss/postcss": "^4.2.2",
     "@types/dompurify": "^3.0.5",
+    "@types/file-saver": "^2.0.7",
     "@types/marked": "^5.0.2",
     "buffer": "^6.0.3",
     "d3": "^7.9.0",
@@ -32,7 +34,7 @@
     "firebase": "^12.9.0",
     "html2canvas": "^1.4.1",
     "idb": "^8.0.3",
-    "jspdf": "^2.5.1",
+    "jspdf": "^2.5.2",
     "marked": "^12.0.0",
     "rxjs": "^7.8.2",
     "sharp": "^0.34.5",

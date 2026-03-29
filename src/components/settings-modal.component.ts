@@ -2,7 +2,7 @@ import { Component, inject, input, WritableSignal, computed, signal, effect } fr
 import { CommonModule } from '@angular/common';
 import { UiService } from '../services/ui.service';
 import { AuthService } from '../services/auth.service';
-import { translations } from '../translations';
+import { TranslationService } from '../services/translation.service';
 
 @Component({
   selector: 'app-settings-modal',
@@ -14,7 +14,8 @@ import { translations } from '../translations';
        <div (click)="uiService.closeSettingsModal()" class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-[fadeIn_0.2s_ease-out]"></div>
        
        <!-- Modal Content -->
-       <div class="w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl p-5 sm:p-8 relative z-10 animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)] overflow-y-auto max-h-[90vh] sm:max-h-[85vh]"
+       <div [dir]="currentLang() === 'ar' ? 'rtl' : 'ltr'"
+            class="w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl p-5 sm:p-8 relative z-10 animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)] overflow-y-auto max-h-[90vh] sm:max-h-[85vh]"
             [class.bg-white]="themeSignal()() === 'light'"
             [class.bg-slate-900]="themeSignal()() === 'dark'"
             [class.border]="themeSignal()() === 'dark'"
@@ -38,77 +39,109 @@ import { translations } from '../translations';
 
          <!-- Settings List -->
          <div class="space-y-2">
-           <!-- User Personalization -->
+            <!-- User Personalization -->
+            <button (click)="uiService.openPersonalizationModal()" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
+              <div class="flex items-center gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 opacity-70">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                  </svg>
+                  <span class="text-sm">{{ t().personalization }}</span>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 opacity-50">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+              </svg>
+            </button>
 
-           <!-- User Personalization -->
-           <button (click)="uiService.openPersonalizationModal()" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
-             <div class="flex items-center gap-3">
-                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 opacity-70">
-                   <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                 </svg>
-                 <span class="text-sm">{{ t().personalization }}</span>
-             </div>
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 opacity-50">
-               <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-             </svg>
-           </button>
+             <!-- Language Toggle -->
+            <button (click)="toggleLang()" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
+                <div class="flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 opacity-70">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" />
+                    </svg>
+                    <span class="text-sm">{{ t().language }}</span>
+                </div>
+                <span class="text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
+                  {{ currentLang() === 'ar' ? 'العربية' : 'English' }}
+                </span>
+            </button>
 
-            <!-- Language Toggle -->
-           <button (click)="toggleLang()" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
-               <div class="flex items-center gap-3">
-                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 opacity-70">
-                     <path stroke-linecap="round" stroke-linejoin="round" d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" />
-                   </svg>
-                   <span class="text-sm">{{ t().language }}</span>
-               </div>
-               <span class="text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
-                 {{ langSignal()() === 'ar' ? 'العربية' : 'English' }}
-               </span>
-           </button>
+            <!-- Theme Toggle -->
+            <button (click)="toggleTheme()" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
+                <div class="flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 opacity-70">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+                    </svg>
+                    <span class="text-sm">{{ t().darkMode }}</span>
+                </div>
+                <div class="w-10 h-5 rounded-full relative transition-colors duration-300"
+                     [class.bg-gray-300]="themeSignal()() === 'light'"
+                     [class.bg-blue-500]="themeSignal()() === 'dark'">
+                   <div class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-sm"
+                        [class.left-0.5]="themeSignal()() === 'light'"
+                        [class.translate-x-5]="themeSignal()() === 'dark'"
+                        [class.left-0.5]="themeSignal()() === 'dark'"></div>
+                </div>
+            </button>
 
-           <!-- Theme Toggle -->
-           <button (click)="toggleTheme()" class="w-full flex items-center justify-between px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
-               <div class="flex items-center gap-3">
-                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 opacity-70">
-                     <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
-                   </svg>
-                   <span class="text-sm">{{ t().darkMode }}</span>
-               </div>
-               <div class="w-10 h-5 rounded-full relative transition-colors duration-300"
-                    [class.bg-gray-300]="themeSignal()() === 'light'"
-                    [class.bg-blue-500]="themeSignal()() === 'dark'">
-                  <div class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-sm"
-                       [class.left-0.5]="themeSignal()() === 'light'"
-                       [class.translate-x-5]="themeSignal()() === 'dark'"
-                       [class.left-0.5]="themeSignal()() === 'dark'"></div>
-               </div>
-           </button>
+            <!-- Export Chat -->
+            <button (click)="uiService.openExportModal(); uiService.closeSettingsModal()" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 opacity-70">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                <span class="text-sm">{{ t().export }}</span>
+            </button>
 
-           <!-- Export Chat -->
-           <button (click)="uiService.openExportModal(); uiService.closeSettingsModal()" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 opacity-70">
-                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-               </svg>
-               <span class="text-sm">{{ t().export }}</span>
-           </button>
+            <!-- Support -->
+            <a href="https://ai-aman.sy/contact" target="_blank" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5 border dark:border-slate-800">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 opacity-70">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span class="text-sm">{{ t().support }}</span>
+            </a>
 
-           <!-- Admin Panel -->
-          </div>
-       </div>
+            <!-- Usage Stats (Free/Pro Users) -->
+            @if (authService.userPlan() !== 'premium' && authService.user()) {
+              <div class="px-4 py-4 rounded-xl border dark:border-slate-800 bg-black/5 dark:bg-white/5 mt-4">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium">{{ t().dailyLimit }}</span>
+                  <span class="text-xs font-bold text-blue-600 dark:text-blue-400">
+                    {{ authService.dailyUsage() | number }} / {{ authService.dailyLimit() | number }}
+                  </span>
+                </div>
+                <div class="w-full h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div class="h-full bg-blue-500 transition-all duration-500"
+                       [style.width.%]="usagePercentage()"></div>
+                </div>
+                <p class="text-[10px] mt-2 opacity-50 leading-tight">
+                  {{ t().limitResetNote || 'يتم إعادة تعيين العداد يومياً عند منتصف الليل.' }}
+                </p>
+              </div>
+            }
+           </div>
+        </div>
     </div>
   `
 })
 export class SettingsModalComponent {
   uiService = inject(UiService);
   authService = inject(AuthService);
+  translationService = inject(TranslationService);
   
-  t = input<any>(translations.ar);
   themeSignal = input<WritableSignal<'light' | 'dark'>>(signal('light') as any);
-  langSignal = input<WritableSignal<'ar' | 'en'>>(signal('ar') as any);
   modelSignal = input<WritableSignal<'fast' | 'core' | 'pro'>>(signal('fast') as any);
 
+  t = computed(() => this.translationService.t());
+  currentLang = computed(() => this.translationService.currentLang());
+
+  usagePercentage = computed(() => {
+    const usage = this.authService.dailyUsage();
+    const limit = this.authService.dailyLimit();
+    if (!limit) return 0;
+    return Math.min(100, Math.round((usage / limit) * 100));
+  });
+
   toggleLang() {
-    this.langSignal().update(l => l === 'ar' ? 'en' : 'ar');
+    this.translationService.toggleLanguage();
   }
 
   toggleTheme() {

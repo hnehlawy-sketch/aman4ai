@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth.service';
 import { UiService } from '../services/ui.service';
+import { ThemeService } from '../services/theme.service';
+import { TranslationService } from '../services/translation.service';
 
 @Component({
   selector: 'app-account-modal',
@@ -10,14 +12,14 @@ import { UiService } from '../services/ui.service';
   imports: [CommonModule, FormsModule],
   template: `
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fadeIn"
-         [dir]="t().accountSettings ? (t().accountSettings === 'إعدادات الحساب' ? 'rtl' : 'ltr') : 'rtl'">
+         [dir]="translationService.currentLang() === 'ar' ? 'rtl' : 'ltr'">
       <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scaleIn"
-           [class.bg-white]="theme() === 'light'"
-           [class.bg-slate-800]="theme() === 'dark'">
+           [class.bg-white]="!themeService.isDark()"
+           [class.bg-slate-800]="themeService.isDark()">
         
         <!-- Header -->
         <div class="p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center">
-          <h2 class="text-xl font-bold text-slate-800 dark:text-white">{{ t().accountSettings }}</h2>
+          <h2 class="text-xl font-bold text-slate-800 dark:text-white">{{ translationService.t().accountSettings }}</h2>
           <button (click)="close()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -43,7 +45,7 @@ import { UiService } from '../services/ui.service';
               </div>
             </div>
             <input #fileInput type="file" class="hidden" accept="image/*" (change)="onFileSelected($event)">
-            <p class="text-sm text-slate-500 dark:text-slate-400">{{ t().uploadPhoto }}</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400">{{ translationService.t().uploadPhoto }}</p>
           </div>
 
           <!-- Form Fields -->
@@ -51,7 +53,7 @@ import { UiService } from '../services/ui.service';
             
             <!-- Email -->
             <div>
-              <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{{ t().email }}</label>
+              <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{{ translationService.t().email }}</label>
               <input type="email" [ngModel]="email()" (ngModelChange)="email.set($event)"
                      class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                      dir="ltr">
@@ -59,7 +61,7 @@ import { UiService } from '../services/ui.service';
 
             <!-- Mobile -->
             <div>
-              <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{{ t().mobile }}</label>
+              <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{{ translationService.t().mobile }}</label>
               <input type="tel" [ngModel]="mobile()" (ngModelChange)="mobile.set($event)"
                      class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                      dir="ltr" placeholder="+963 ...">
@@ -86,7 +88,7 @@ import { UiService } from '../services/ui.service';
         <!-- Footer -->
         <div class="p-6 border-t border-gray-100 dark:border-slate-700 flex justify-end gap-3">
           <button (click)="close()" class="px-4 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors font-medium">
-            {{ t().cancel }}
+            {{ translationService.t().cancel }}
           </button>
           <button (click)="save()" [disabled]="isLoading()" 
                   class="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
@@ -96,7 +98,7 @@ import { UiService } from '../services/ui.service';
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             }
-            <span>{{ t().saveProfile }}</span>
+            <span>{{ translationService.t().saveProfile }}</span>
           </button>
         </div>
 
@@ -107,9 +109,8 @@ import { UiService } from '../services/ui.service';
 export class AccountModalComponent implements OnInit {
   authService = inject(AuthService);
   uiService = inject(UiService);
-
-  t = input<any>();
-  theme = input<'light' | 'dark'>('light');
+  themeService = inject(ThemeService);
+  translationService = inject(TranslationService);
 
   email = signal('');
   mobile = signal('');
@@ -166,14 +167,14 @@ export class AccountModalComponent implements OnInit {
       // 3. Update Mobile
       await this.authService.updateUserMobile(this.mobile());
 
-      this.successMessage.set('تم تحديث المعلومات بنجاح');
+      this.successMessage.set(this.translationService.t().updateSuccess);
       setTimeout(() => this.close(), 1500);
     } catch (e: any) {
       console.error(e);
       if (e.code === 'auth/requires-recent-login') {
-        this.errorMessage.set('يرجى تسجيل الدخول مرة أخرى لتغيير البريد الإلكتروني لدواعي الأمان.');
+        this.errorMessage.set(this.translationService.t().reauthRequired);
       } else {
-        this.errorMessage.set(e.message || 'حدث خطأ أثناء التحديث');
+        this.errorMessage.set(e.message || this.translationService.t().updateError);
       }
     } finally {
       this.isLoading.set(false);

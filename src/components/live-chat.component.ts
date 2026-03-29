@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild, inject, signal, input, model, WritableSignal, OnDestroy } from '@angular/core';
+import { Component, ElementRef, ViewChild, inject, signal, computed, input, model, WritableSignal, OnDestroy, effect } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { GeminiService, ChatMessage } from '../services/gemini.service';
@@ -6,7 +6,7 @@ import { AuthService } from '../services/auth.service';
 import { UiService } from '../services/ui.service';
 import { ImageService } from '../services/image.service';
 import { DataLoggingService } from '../services/data-logging.service';
-import { translations } from '../translations';
+import { TranslationService } from '../services/translation.service';
 import { SafePipe } from '../pipes/safe.pipe';
 
 declare var window: any;
@@ -20,8 +20,7 @@ declare var window: any;
       
       <!-- Atmospheric Background -->
       <div class="absolute inset-0 z-0 opacity-60 transition-opacity duration-1000" [class.opacity-100]="liveState() === 'speaking'">
-        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] max-w-[800px] max-h-[800px] rounded-full blur-[100px] transition-all duration-300 ease-out"
-             [style.transform]="'translate(-50%, -50%) scale(' + audioScale() + ')'"
+        <div #bgPulse class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] max-w-[800px] max-h-[800px] rounded-full blur-[100px] transition-all duration-300 ease-out"
              [class.bg-indigo-500]="liveState() === 'speaking'"
              [class.bg-blue-500]="liveState() === 'listening'"
              [class.bg-slate-700]="liveState() === 'idle' || liveState() === 'connecting'"
@@ -55,20 +54,22 @@ declare var window: any;
         <div class="absolute inset-x-0 top-0 bottom-32 overflow-y-auto p-6 flex flex-col gap-4 mask-fade-top z-20 pointer-events-none">
           <div class="flex-1"></div>
           @for (msg of messages(); track msg.id) {
-            <div class="max-w-xl mx-auto w-full animate-fadeIn" [class.text-right]="msg.role === 'user'" [class.text-left]="msg.role === 'model'">
-              <div class="inline-block px-4 py-2 rounded-2xl backdrop-blur-md border border-white/5 text-sm pointer-events-auto"
-                   [class.bg-white/5]="msg.role === 'user'"
-                   [class.bg-indigo-500/10]="msg.role === 'model'">
-                <p class="text-white/60 leading-relaxed">{{ msg.text }}</p>
-                @if (msg.generatedImages; as images) {
-                  <div class="mt-2 flex flex-wrap gap-2">
-                    @for (img of images; track img.url) {
-                      <img [src]="img.url" class="w-20 h-20 rounded-lg object-cover border border-white/10">
-                    }
-                  </div>
-                }
+            @if (!msg.isHidden) {
+              <div class="max-w-xl mx-auto w-full animate-fadeIn" [class.text-right]="msg.role === 'user'" [class.text-left]="msg.role === 'model'">
+                <div class="inline-block px-4 py-2 rounded-2xl backdrop-blur-md border border-white/5 text-sm pointer-events-auto"
+                     [class.bg-white/5]="msg.role === 'user'"
+                     [class.bg-indigo-500/10]="msg.role === 'model'">
+                  <p class="text-white/60 leading-relaxed">{{ msg.text }}</p>
+                  @if (msg.generatedImages; as images) {
+                    <div class="mt-2 flex flex-wrap gap-2">
+                      @for (img of images; track img.url) {
+                        <img [src]="img.url" class="w-20 h-20 rounded-lg object-cover border border-white/10">
+                      }
+                    </div>
+                  }
+                </div>
               </div>
-            </div>
+            }
           }
         </div>
 
@@ -77,8 +78,7 @@ declare var window: any;
           <canvas #liveCanvas class="absolute inset-0 w-full h-full"></canvas>
           
           <!-- Core Orb -->
-          <div class="absolute w-24 h-24 rounded-full bg-black border-2 border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.5)] flex items-center justify-center z-10 transition-transform duration-200"
-               [style.transform]="'scale(' + audioScale() + ')'">
+          <div #liveBlob class="absolute w-24 h-24 rounded-full bg-black border-2 border-white/10 shadow-[0_0_40px_rgba(0,0,0,0.5)] flex items-center justify-center z-10 transition-transform duration-200">
             @if (liveState() === 'listening') {
               <div class="w-3 h-3 rounded-full bg-blue-500 animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
             } @else if (liveState() === 'speaking') {
@@ -133,7 +133,7 @@ declare var window: any;
                   <!-- Fallback if iframe fails or key missing, using a simple static map or just a label -->
                   <div class="absolute inset-0 bg-blue-900/20 pointer-events-none"></div>
                   <div class="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs border border-white/10">
-                    {{ content.data.label || 'موقع جغرافي' }}
+                    {{ content.data.label || t().location }}
                   </div>
                 </div>
               } @else if (content.type === 'route') {
@@ -158,7 +158,7 @@ declare var window: any;
                   </div>
                 </div>
               }
-              <button (click)="visualContent.set(null)" class="mt-3 text-xs text-white/40 hover:text-white/60 transition-colors underline">إخفاء</button>
+              <button (click)="visualContent.set(null)" class="mt-3 text-xs text-white/40 hover:text-white/60 transition-colors underline">{{ t().hide }}</button>
             </div>
           }
 
@@ -169,7 +169,7 @@ declare var window: any;
           </p>
           
           @if (!liveFinalTranscript() && !liveInterimTranscript() && liveState() === 'listening') {
-            <p class="text-xl text-white/40 font-light animate-pulse">{{ t().listening || 'أنا أستمع إليك...' }}</p>
+            <p class="text-xl text-white/40 font-light animate-pulse">{{ t().listening }}</p>
           }
           @if (liveState() === 'error') {
             <p class="text-xl text-red-400 font-light">{{ liveError() || t().liveError }}</p>
@@ -210,15 +210,15 @@ declare var window: any;
       <!-- Voice Selector (Overlay) -->
       @if (showVoiceSelector()) {
         <div class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md animate-fadeIn">
-          <h3 class="text-lg font-bold mb-4">{{ t().voicePreference || 'تفضيل الصوت' }}</h3>
+          <h3 class="text-lg font-bold mb-4">{{ t().voicePreference }}</h3>
           <div class="flex gap-4">
             <button (click)="selectVoice('Puck')" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-white/10 hover:bg-white/20 transition-all border border-white/10">
               <span class="text-3xl">👨</span>
-              <span class="text-sm font-medium">{{ t().voiceMale || 'صوت شاب' }}</span>
+              <span class="text-sm font-medium">{{ t().voiceMale }}</span>
             </button>
             <button (click)="selectVoice('Kore')" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-white/10 hover:bg-white/20 transition-all border border-white/10">
               <span class="text-3xl">👩</span>
-              <span class="text-sm font-medium">{{ t().voiceFemale || 'صوت فتاة' }}</span>
+              <span class="text-sm font-medium">{{ t().voiceFemale }}</span>
             </button>
           </div>
         </div>
@@ -233,8 +233,9 @@ export class LiveChatComponent implements OnDestroy {
   uiService = inject(UiService);
   imageService = inject(ImageService);
   private logger = inject(DataLoggingService);
+  private translationService = inject(TranslationService);
 
-  t = input<any>(translations.ar);
+  t = computed(() => this.translationService.t());
   messages = model<ChatMessage[]>([]);
   
   liveState = signal<'idle' | 'connecting' | 'listening' | 'speaking' | 'error'>('idle');
@@ -260,6 +261,7 @@ export class LiveChatComponent implements OnDestroy {
 
   @ViewChild('liveCanvas') private liveCanvas!: ElementRef<HTMLCanvasElement>;
   @ViewChild('liveBlob') private liveBlob!: ElementRef<HTMLDivElement>;
+  @ViewChild('bgPulse') private bgPulse!: ElementRef<HTMLDivElement>;
 
   ngOnDestroy() {
     this.closeLiveView();
@@ -294,7 +296,7 @@ export class LiveChatComponent implements OnDestroy {
     // Check limit before starting
     const hasTokens = await this.authService.checkAndIncrementUsage(500); // Initial estimate
     if (!hasTokens) {
-      this.uiService.showToast(this.t().limitExceeded || 'تم تجاوز الحد اليومي، يرجى الترقية.', 'error');
+      this.uiService.showToast(this.t().limitReached || 'تم تجاوز الحد اليومي، يرجى الترقية.', 'error');
       this.uiService.openUpgradeModal('pro');
       return;
     }
@@ -319,7 +321,7 @@ export class LiveChatComponent implements OnDestroy {
                this.interruptAISpeech();
                this.stopLiveSession();
                this.liveState.set('idle');
-               this.uiService.showToast(this.t().limitExceeded || 'تم تجاوز الحد اليومي، يرجى الترقية.', 'error');
+               this.uiService.showToast(this.t().limitReached || 'تم تجاوز الحد اليومي، يرجى الترقية.', 'error');
                this.uiService.openUpgradeModal('pro');
              }
           }, 60000); // Check every minute
@@ -402,6 +404,7 @@ export class LiveChatComponent implements OnDestroy {
     source.connect(this.processor);
     this.processor.connect(this.audioContext.destination);
 
+    if (!this.liveCanvas?.nativeElement) return;
     const canvas = this.liveCanvas.nativeElement;
     canvas.width = canvas.offsetWidth;
     canvas.height = canvas.offsetHeight;
@@ -526,7 +529,7 @@ export class LiveChatComponent implements OnDestroy {
     if (msg.serverContent?.interrupted) {
       console.log('[LiveChat] Session interrupted');
       if (this.currentModelText.trim()) {
-        this.addMessageToHistory('model', this.currentModelText.trim() + ' [تمت المقاطعة]');
+        this.addMessageToHistory('model', this.currentModelText.trim() + ' [' + this.t().interrupted + ']');
         this.currentModelText = '';
       }
       this.liveFinalTranscript.set('');
@@ -543,8 +546,8 @@ export class LiveChatComponent implements OnDestroy {
     let toastMessage = '';
 
     if (name === 'generateImage') {
-      intentText = `[طلب توليد صورة: ${args.prompt}]`;
-      toastMessage = 'جاري تحضير الصورة...';
+      intentText = `[` + this.t().preparingImage + ` ${args.prompt}]`;
+      toastMessage = this.t().preparingImage;
       isCustomTool = true;
       
       console.log('[LiveChat] Generating image for prompt:', args.prompt);
@@ -577,42 +580,42 @@ export class LiveChatComponent implements OnDestroy {
                 this.visualContent.set({ type: 'image', data: finalUrl });
                 
                 // Add to history with watermarked version
-                this.addMessageToHistory('model', `[تم توليد الصورة: ${args.prompt}]`, [{ url: finalUrl, mimeType }]);
+                this.addMessageToHistory('model', `[` + this.t().generateImage + `: ${args.prompt}]`, [{ url: finalUrl, mimeType }]);
               } catch (e) {
                 console.error('[LiveChat] Failed to process image:', e);
-                this.addMessageToHistory('model', `[تم توليد الصورة: ${args.prompt}]`, [{ url: rawImageUrl, mimeType }]);
+                this.addMessageToHistory('model', `[` + this.t().generateImage + `: ${args.prompt}]`, [{ url: rawImageUrl, mimeType }]);
               }
             } else {
-              this.addMessageToHistory('model', `[تم توليد الصورة: ${args.prompt}]`, [{ url: rawImageUrl, mimeType }]);
+              this.addMessageToHistory('model', `[` + this.t().generateImage + `: ${args.prompt}]`, [{ url: rawImageUrl, mimeType }]);
             }
           } else {
             console.warn('[LiveChat] Image generation failed: No images returned');
-            this.uiService.showToast('فشل توليد الصورة', 'error');
+            this.uiService.showToast(this.t().imageGenFailed, 'error');
           }
         },
         error: (err) => {
           console.error('[LiveChat] Image generation error:', err);
-          this.uiService.showToast('حدث خطأ أثناء توليد الصورة', 'error');
+          this.uiService.showToast(this.t().imageGenError, 'error');
         }
       });
 
     } else if (name === 'getUserLocation') {
-      intentText = `[طلب معرفة الموقع الحالي]`;
-      toastMessage = 'جاري تحديد الموقع...';
+      intentText = `[` + this.t().locating + `]`;
+      toastMessage = this.t().locating;
       isCustomTool = true;
 
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition((pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
-          this.visualContent.set({ type: 'map', data: { lat, lng, label: 'موقعك الحالي' } });
-          this.addMessageToHistory('model', `[تم تحديد الموقع: ${lat}, ${lng}]`);
+          this.visualContent.set({ type: 'map', data: { lat, lng, label: this.t().currentLocation } });
+          this.addMessageToHistory('model', `[` + this.t().currentLocation + `: ${lat}, ${lng}]`);
         });
       }
 
     } else if (name === 'searchLocation') {
-      intentText = `[طلب البحث عن موقع: ${args.query}]`;
-      toastMessage = `جاري البحث عن ${args.query}...`;
+      intentText = `[` + this.t().searchingFor + ` ${args.query}]`;
+      toastMessage = this.t().searchingFor + ` ${args.query}...`;
       isCustomTool = true;
 
       try {
@@ -623,13 +626,13 @@ export class LiveChatComponent implements OnDestroy {
           const lng = parseFloat(data[0].lon);
           const label = data[0].display_name.split(',')[0];
           this.visualContent.set({ type: 'map', data: { lat, lng, label } });
-          this.addMessageToHistory('model', `[تم العثور على الموقع: ${label}]`);
+          this.addMessageToHistory('model', `[` + this.t().location + `: ${label}]`);
         }
       } catch (e) {}
 
     } else if (name === 'getDirections') {
-      intentText = `[طلب البحث عن مسار من ${args.originQuery} إلى ${args.destinationQuery}]`;
-      toastMessage = `جاري البحث عن المسار...`;
+      intentText = `[` + this.t().findingRoute + ` ${args.originQuery} -> ${args.destinationQuery}]`;
+      toastMessage = this.t().findingRoute;
       isCustomTool = true;
 
       try {
@@ -640,7 +643,7 @@ export class LiveChatComponent implements OnDestroy {
            });
            originLat = pos.coords.latitude;
            originLng = pos.coords.longitude;
-           originLabel = 'موقعك الحالي';
+           originLabel = this.t().currentLocation;
         } else {
            const res1 = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(args.originQuery)}`);
            const data1 = await res1.json();
@@ -672,8 +675,8 @@ export class LiveChatComponent implements OnDestroy {
            if (osrmData && osrmData.routes && osrmData.routes.length > 0) {
               const distanceKm = (osrmData.routes[0].distance / 1000).toFixed(1);
               const durationMin = Math.round(osrmData.routes[0].duration / 60);
-              distanceText = `${distanceKm} كم`;
-              durationText = `${durationMin} دقيقة`;
+              distanceText = `${distanceKm} ` + (this.translationService.currentLang() === 'ar' ? 'كم' : 'km');
+              durationText = `${durationMin} ` + (this.translationService.currentLang() === 'ar' ? 'دقيقة' : 'min');
            }
         } catch (e) {
            console.error('Failed to fetch route distance', e);
@@ -688,14 +691,14 @@ export class LiveChatComponent implements OnDestroy {
             duration: durationText
           } 
         });
-        this.addMessageToHistory('model', `[تم العثور على المسار من ${originLabel} إلى ${destLabel}: ${distanceText} (${durationText})]`);
+        this.addMessageToHistory('model', `[` + this.t().findingRoute + `: ${originLabel} ➔ ${destLabel}: ${distanceText} (${durationText})]`);
       } catch (e) {
         console.error('[LiveChat] Route search failed:', e);
-        this.uiService.showToast('فشل البحث عن المسار', 'error');
+        this.uiService.showToast(this.t().routeNotFound, 'error');
       }
 
     } else if (name === 'googleSearch') {
-      intentText = `[طلب بحث في الويب]`;
+      intentText = `[` + this.t().webSearch + `]`;
     }
 
     if (intentText) {
@@ -774,7 +777,6 @@ export class LiveChatComponent implements OnDestroy {
     };
   }
 
-  audioScale = signal(1);
   private smoothedRms = 0;
 
   drawVisualizer() {
@@ -806,7 +808,15 @@ export class LiveChatComponent implements OnDestroy {
       
       // Smooth RMS for scale
       this.smoothedRms = this.smoothedRms * 0.8 + rms * 0.2;
-      this.audioScale.set(1 + (this.smoothedRms / 40));
+      
+      // Direct DOM manipulation to avoid infinite change detection (NG0103)
+      const scale = 1 + (this.smoothedRms / 40);
+      if (this.liveBlob?.nativeElement) {
+        this.liveBlob.nativeElement.style.transform = `scale(${scale})`;
+      }
+      if (this.bgPulse?.nativeElement) {
+        this.bgPulse.nativeElement.style.transform = `translate(-50%, -50%) scale(${scale})`;
+      }
 
       const centerX = width / 2;
       const centerY = height / 2;

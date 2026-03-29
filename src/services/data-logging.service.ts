@@ -2,18 +2,13 @@ import { Injectable, inject } from '@angular/core';
 import { collection, addDoc, getFirestore, serverTimestamp, doc, writeBatch, increment } from 'firebase/firestore';
 import { LogEntry } from '../models';
 
+import { db } from './auth.service';
+
 @Injectable({
   providedIn: 'root'
 })
 export class DataLoggingService {
-  private _db: any;
-
-  private get db() {
-    if (!this._db) {
-      this._db = getFirestore();
-    }
-    return this._db;
-  }
+  private db = db;
 
   private calculateCost(log: any): number {
     if (!log.tokens) return 0;

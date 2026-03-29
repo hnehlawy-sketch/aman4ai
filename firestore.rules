@@ -13,7 +13,6 @@ service cloud.firestore {
     //   - displayName: string
     //   - photoURL: string
     //   - mobile: string
-    //   - isAdmin: boolean
     //   - isPremium: boolean
     //   - plan: string (free, pro, premium)
     //   - lastLogin: string (ISO date)
@@ -47,98 +46,114 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          (request.auth.token.email == "h.nehlawy@gmail.com" && request.auth.token.email_verified == true)
+        );
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
-          (request.auth.token.email == "h.nehlawy@gmail.com" && request.auth.token.email_verified == true));
-    }
-
-    function validStringLength(field, minLen, maxLen) {
-      return request.resource.data[field] is string &&
-        request.resource.data[field].size() >= minLen &&
-        request.resource.data[field].size() <= maxLen;
-    }
-
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email']) &&
-             validStringLength('uid', 1, 100) &&
-             validStringLength('email', 5, 255) &&
+             data.uid is string &&
+             data.email is string &&
              (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
-             (!('isAdmin' in data) || data.isAdmin is bool) &&
-             (!('isPremium' in data) || data.isPremium is bool);
+             (!('isPremium' in data) || data.isPremium is bool) &&
+             (!('role' in data) || data.role in ['user']);
+    }
+
+    function isValidPaymentRequest(data) {
+      return data.keys().hasAll(['uid', 'email', 'status', 'plan']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.status in ['pending', 'approved', 'rejected'] &&
+             data.plan in ['free', 'pro', 'premium'] &&
+             (!('amount' in data) || data.amount is number) &&
+             (!('currency' in data) || data.currency is string);
     }
 
     function isValidChat(data) {
       return data.keys().hasAll(['id', 'messages']) &&
-             validStringLength('id', 1, 100) &&
-             data.messages is list && data.messages.size() < 1000 &&
+             data.id is string &&
+             data.messages is list &&
              (!('title' in data) || (data.title is string && data.title.size() < 200));
     }
 
     function isValidLog(data) {
       return data.keys().hasAll(['type', 'timestamp']) &&
              data.type is string &&
-             data.timestamp is timestamp;
+             (data.timestamp is timestamp || data.timestamp is string);
     }
 
     // ===============================================================
     // Rules
     // ===============================================================
 
+    // Publicly readable system configurations
+    match /settings/system {
+      allow read: if true;
+    }
+    match /settings/pricing {
+      allow read: if true;
+    }
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /payment_methods/{methodId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
-                    (isOwner(userId) && request.resource.data.isAdmin == false || isAdmin());
-      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
-                    ((isOwner(userId) && request.resource.data.isAdmin == resource.data.isAdmin) || isAdmin());
+      allow read: if isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && 
+                    (!('role' in request.resource.data) || request.resource.data.role == 'user');
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                    request.resource.data.role == resource.data.role;
       
       match /chats {
-        allow list: if isOwner(userId) || isAdmin();
+        allow list: if isOwner(userId);
       }
       match /chats/{chatId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow create: if (isOwner(userId) || isAdmin()) && isValidChat(request.resource.data);
-        allow update: if (isOwner(userId) || isAdmin()) && isValidChat(request.resource.data);
-        allow delete: if isOwner(userId) || isAdmin();
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidChat(request.resource.data);
+        allow update: if isOwner(userId) && isValidChat(request.resource.data);
+        allow delete: if isOwner(userId);
       }
     }
 
     match /logs/{logId} {
-      allow read: if isAdmin();
+      allow read: if false;
       allow create: if isAuthenticated() && isValidLog(request.resource.data);
-      allow update, delete: if isAdmin();
+      allow update, delete: if false;
     }
 
     match /reports/{reportId} {
-      allow read: if isAdmin();
-      allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
+      allow read: if false;
+      allow write: if false;
     }
 
     match /payment_requests/{requestId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.uid == request.auth.uid);
-      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid && isValidPaymentRequest(request.resource.data) && request.resource.data.status == 'pending';
+      allow update: if false;
+      allow delete: if false;
     }
 
-    match /payment_methods/{methodId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    match /settings/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    // Default deny
-    match /{path=**} {
-      allow read, write: if false;
+    // Default deny for others, but allow admin everywhere
+    match /{document=**} {
+      allow read, write: if isAdmin();
     }
   }
 }

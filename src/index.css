@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Cairo", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Amiri", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+body {
+  @apply antialiased transition-colors duration-300;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-400/20 rounded-full hover:bg-slate-400/40 transition-colors;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  @apply bg-white/10 hover:bg-white/20;
+}
+
+/* Hide scrollbar for horizontal scrolling areas */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.mask-fade-edges {
+  mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+}
+
+.glass {
+  @apply backdrop-blur-md border;
+}
+
+.light .glass {
+  @apply bg-white/80 border-slate-100;
+}
+
+.dark .glass {
+  @apply bg-[#0a0a0a]/80 border-slate-800/50;
+}
+
+mat-icon {
+  font-family: 'Material Icons' !important;
+  font-style: normal;
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'liga';
+}
+
+.typing-dot {
+  animation: typing 1.4s infinite ease-in-out both;
+}
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typing {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* Sidebar Animations */
+.sidebar-overlay {
+  @apply transition-opacity duration-300 ease-in-out;
+}
+.sidebar-content {
+  @apply transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)];
+}
+
+/* Markdown Styles for Chat Bubble */
+.prose {
+  @apply text-[0.95rem] leading-relaxed;
+}
+.prose p { @apply mb-3; }
+.prose p:last-child { @apply mb-0; }
+.prose strong { @apply font-bold text-inherit; }
+.prose ul { @apply list-disc ps-6 mb-3; }
+.prose ol { @apply list-decimal ps-6 mb-3; }
+.prose h1, .prose h2, .prose h3 { @apply font-bold mt-4 mb-2 leading-tight; }
+.prose h1 { @apply text-2xl; }
+.prose h2 { @apply text-xl; }
+.prose h3 { @apply text-lg; }
+.prose pre { 
+  @apply bg-slate-900 text-slate-100 p-4 rounded-xl overflow-x-auto my-2 text-left shadow-lg;
+  direction: ltr;
+}
+.prose code { 
+  @apply font-mono bg-black/5 px-1.5 py-0.5 rounded text-[0.85em] border border-black/5;
+}
+.dark .prose code {
+  @apply bg-white/5 border-white/5;
+}
+.prose pre code { 
+  @apply bg-transparent p-0 text-inherit border-none;
+}
+.prose a { @apply text-indigo-500 underline hover:text-indigo-600 transition-colors; }
+
+/* RTL Prose Support */
+[dir="rtl"] .prose {
+  text-align: right;
+}
+
+[dir="rtl"] .prose ul, 
+[dir="rtl"] .prose ol {
+  padding-right: 1.5rem;
+  padding-left: 0;
+  list-style-position: inside;
+}
+
+[dir="rtl"] .prose li {
+  text-align: right;
+}
+
+/* Ensure code blocks are always LTR */
+.prose pre, .prose code {
+  direction: ltr !important;
+  text-align: left !important;
+}

@@ -1,14 +1,13 @@
-import { Component, inject, signal, output, input } from '@angular/core';
+import { Component, inject, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { AuthService } from '../services/auth.service';
 import { UiService } from '../services/ui.service';
-import { translations } from '../translations';
+import { ThemeService } from '../services/theme.service';
+import { AuthFormComponent } from './auth-form.component';
 
 @Component({
   selector: 'app-auth-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, AuthFormComponent],
   template: `
     <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
        <!-- Backdrop -->
@@ -16,10 +15,10 @@ import { translations } from '../translations';
        
        <!-- Modal Content -->
        <div class="w-full max-w-md rounded-3xl shadow-2xl p-8 relative z-10 animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)]"
-            [class.bg-white]="theme() === 'light'"
-            [class.bg-slate-900]="theme() === 'dark'"
-            [class.border]="theme() === 'dark'"
-            [class.border-slate-800]="theme() === 'dark'">
+            [class.bg-white]="!themeService.isDark()"
+            [class.bg-slate-900]="themeService.isDark()"
+            [class.border]="themeService.isDark()"
+            [class.border-slate-800]="themeService.isDark()">
          
          <button (click)="uiService.closeAuthModal()" class="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors opacity-50 hover:opacity-100">
            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -27,251 +26,19 @@ import { translations } from '../translations';
            </svg>
          </button>
 
-         <!-- Logo -->
-         <div class="flex flex-col items-center mb-6">
-            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-lg mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-7 h-7 text-white">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-              </svg>
-            </div>
-            <h1 class="text-xl font-bold">
-              {{ authMode() === 'login' ? t().loginTitle : (authMode() === 'signup' ? t().signupTitle : t().forgotPasswordTitle || 'استعادة كلمة المرور') }}
-            </h1>
-            <p class="text-sm mt-1 opacity-60 text-center px-4">
-              {{ authMode() === 'forgot' ? (t().forgotPasswordDesc || 'أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور.') : t().mustLogin }}
-            </p>
-         </div>
-
-         <!-- Error Message -->
-         @if (authError()) {
-           <div class="mb-4 p-3 rounded-xl text-xs flex items-center gap-2 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 border border-red-100 dark:border-red-800">
-             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
-               <path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clip-rule="evenodd" />
-             </svg>
-             {{ authError() }}
-           </div>
-         }
-
-         <!-- Form -->
-         <div class="space-y-3">
-            @if (authMode() === 'signup') {
-              <div>
-                <input 
-                  [value]="authName()" 
-                  (input)="authName.set($any($event.target).value)" 
-                  type="text" 
-                  class="w-full px-4 py-3 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm"
-                  [class.bg-gray-50]="theme() === 'light'"
-                  [class.border-gray-200]="theme() === 'light'"
-                  [class.bg-slate-800]="theme() === 'dark'"
-                  [class.border-slate-700]="theme() === 'dark'"
-                  [placeholder]="t().name"
-                >
-              </div>
-            }
-
-            <div>
-              <input 
-                [value]="authEmail()" 
-                (input)="authEmail.set($any($event.target).value)" 
-                type="email" 
-                class="w-full px-4 py-3 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm text-left"
-                [class.bg-gray-50]="theme() === 'light'"
-                [class.border-gray-200]="theme() === 'light'"
-                [class.bg-slate-800]="theme() === 'dark'"
-                [class.border-slate-700]="theme() === 'dark'"
-                [placeholder]="t().email"
-                dir="ltr"
-              >
-            </div>
-
-            @if (authMode() !== 'forgot') {
-              <div class="relative">
-                <input 
-                  [value]="authPass()" 
-                  (input)="authPass.set($any($event.target).value)" 
-                  [type]="showPassword() ? 'text' : 'password'" 
-                  class="w-full px-4 py-3 rounded-xl border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 outline-none transition-all text-sm"
-                  [class.bg-gray-50]="theme() === 'light'"
-                  [class.border-gray-200]="theme() === 'light'"
-                  [class.bg-slate-800]="theme() === 'dark'"
-                  [class.border-slate-700]="theme() === 'dark'"
-                  [placeholder]="t().password"
-                >
-                <button (click)="showPassword.set(!showPassword())" type="button" class="absolute left-3 top-1/2 -translate-y-1/2 p-1 opacity-50 hover:opacity-100 transition-opacity">
-                  @if (showPassword()) {
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-                    </svg>
-                  } @else {
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                    </svg>
-                  }
-                </button>
-              </div>
-              
-              @if (authMode() === 'login') {
-                <div class="flex justify-start px-1 mt-1">
-                  <button (click)="authMode.set('forgot'); authError.set(''); authSuccess.set('')" class="text-xs text-blue-600 hover:underline opacity-80">
-                    {{ t().forgotPasswordBtn || 'نسيت كلمة المرور؟' }}
-                  </button>
-                </div>
-              }
-            }
-         </div>
-
-         <div class="mt-6 space-y-3">
-           <button 
-             (click)="handleAuth()"
-             [disabled]="authLoading()"
-             class="w-full py-3 rounded-xl font-bold shadow-lg shadow-slate-900/10 active:scale-95 transition-transform flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-             [class.bg-slate-900]="theme() === 'light'"
-             [class.text-white]="theme() === 'light'"
-             [class.bg-white]="theme() === 'dark'"
-             [class.text-slate-900]="theme() === 'dark'"
-           >
-             @if (authLoading()) {
-               <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-               </svg>
-             } @else {
-               {{ authMode() === 'login' ? t().loginBtn : (authMode() === 'signup' ? t().signupBtn : (t().sendResetLink || 'إرسال رابط التفعيل')) }}
-             }
-           </button>
-
-           @if (authMode() !== 'forgot') {
-             <div class="relative flex py-1 items-center">
-                 <div class="flex-grow border-t" [class.border-gray-200]="theme() === 'light'" [class.border-slate-700]="theme() === 'dark'"></div>
-                 <span class="flex-shrink-0 mx-4 text-xs opacity-50 uppercase font-bold">{{ t().language === 'Arabic' ? 'أو' : 'OR' }}</span>
-                 <div class="flex-grow border-t" [class.border-gray-200]="theme() === 'light'" [class.border-slate-700]="theme() === 'dark'"></div>
-             </div>
-
-             <!-- Google Login Button -->
-             <button 
-               (click)="handleGoogleAuth()"
-               [disabled]="authLoading()"
-               class="w-full py-3 rounded-xl font-medium border flex items-center justify-center gap-3 transition-colors disabled:opacity-70"
-               [class.bg-white]="theme() === 'light'"
-               [class.border-gray-200]="theme() === 'light'"
-               [class.hover:bg-gray-50]="theme() === 'light'"
-               [class.text-slate-700]="theme() === 'light'"
-               [class.bg-slate-800]="theme() === 'dark'"
-               [class.border-slate-700]="theme() === 'dark'"
-               [class.hover:bg-slate-700]="theme() === 'dark'"
-               [class.text-white]="theme() === 'dark'"
-             >
-                <svg class="w-5 h-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                </svg>
-                <span>{{ t().googleBtn }}</span>
-             </button>
-           }
-         </div>
-
-         <div class="mt-6 text-center text-sm opacity-60">
-           @if (authMode() === 'login') {
-             {{ t().noAccount }} <button (click)="toggleAuthMode()" class="text-blue-600 font-bold hover:underline">{{ t().createOne }}</button>
-           } @else if (authMode() === 'signup') {
-             {{ t().hasAccount }} <button (click)="toggleAuthMode()" class="text-blue-600 font-bold hover:underline">{{ t().signInHere }}</button>
-           } @else {
-             <button (click)="authMode.set('login'); authError.set(''); authSuccess.set('')" class="text-blue-600 font-bold hover:underline">{{ t().backToLogin || 'العودة لتسجيل الدخول' }}</button>
-           }
-         </div>
+         <app-auth-form (loginSuccess)="onLoginSuccess()"></app-auth-form>
        </div>
     </div>
   `
 })
 export class AuthModalComponent {
-  authService = inject(AuthService);
   uiService = inject(UiService);
+  themeService = inject(ThemeService);
   
-  t = input<any>(translations.ar);
-  theme = input<'light' | 'dark'>('light');
-
   loginSuccess = output<void>();
 
-  authMode = signal<'login' | 'signup' | 'forgot'>('login');
-  authEmail = signal('');
-  authPass = signal('');
-  authName = signal('');
-  authLoading = signal(false);
-  authError = signal('');
-  authSuccess = signal('');
-  showPassword = signal(false);
-  
-  async handleAuth() {
-    if (!this.authEmail()) return;
-    if (this.authMode() !== 'forgot' && !this.authPass()) return;
-    if (this.authMode() === 'signup' && !this.authName()) return;
-
-    this.authLoading.set(true);
-    this.authError.set('');
-    this.authSuccess.set('');
-
-    try {
-      if (this.authMode() === 'login') {
-        await this.authService.login(this.authEmail(), this.authPass());
-      } else if (this.authMode() === 'signup') {
-        await this.authService.signup(this.authName(), this.authEmail(), this.authPass());
-        this.authSuccess.set(this.t().verifyEmail);
-        this.authMode.set('login'); 
-      } else if (this.authMode() === 'forgot') {
-        await this.authService.resetPassword(this.authEmail());
-        this.authSuccess.set(this.t().resetEmailSent || 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.');
-        this.authLoading.set(false);
-        return; // Don't close modal yet
-      }
-      if (this.authService.user()) {
-        this.uiService.closeAuthModal();
-        this.loginSuccess.emit();
-      }
-    } catch (e: any) {
-      console.error(e);
-      let msg = this.t().authErr;
-      if (e.code === 'auth/email-already-in-use') msg = this.t().authEmailInUse;
-      if (e.code === 'auth/weak-password') msg = this.t().authWeakPass;
-      if (e.code === 'auth/invalid-credential') msg = this.t().authInvalidCred;
-      this.authError.set(msg);
-    } finally {
-      this.authLoading.set(false);
-    }
-  }
-
-  async handleGoogleAuth() {
-    this.authLoading.set(true);
-    this.authError.set('');
-    
-    try {
-      await this.authService.loginWithGoogle();
-      if (this.authService.user()) {
-        this.uiService.closeAuthModal();
-        this.loginSuccess.emit();
-      }
-    } catch (e: any) {
-      console.error(e);
-      let msg = this.t().authErr;
-      if (e.code === 'auth/popup-blocked') msg = 'تم حظر النافذة المنبثقة. يرجى السماح بالنوافذ المنبثقة لهذا الموقع.';
-      if (e.code === 'auth/popup-closed-by-user') msg = 'تم إغلاق نافذة تسجيل الدخول.';
-      if (e.code === 'auth/cancelled-popup-request') msg = 'تم إلغاء طلب تسجيل الدخول.';
-      if (e.code === 'auth/unauthorized-domain') {
-        msg = `نطاق الموقع غير مصرح به (${window.location.hostname}). يرجى إضافته في إعدادات Firebase.`;
-      }
-      
-      this.authError.set(msg);
-    } finally {
-      this.authLoading.set(false);
-    }
-  }
-
-  toggleAuthMode() {
-    this.authMode.update(m => m === 'login' ? 'signup' : 'login');
-    this.authError.set('');
-    this.authSuccess.set('');
+  onLoginSuccess() {
+    this.uiService.closeAuthModal();
+    this.loginSuccess.emit();
   }
 }

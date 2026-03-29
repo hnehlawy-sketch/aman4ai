@@ -1,5 +1,7 @@
-import { Component, input, output } from '@angular/core';
+import { Component, input, output, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ThemeService } from '../services/theme.service';
+import { TranslationService } from '../services/translation.service';
 
 @Component({
   selector: 'app-input-model-menu',
@@ -8,9 +10,14 @@ import { CommonModule } from '@angular/common';
   templateUrl: './input-model-menu.component.html'
 })
 export class InputModelMenuComponent {
-  t = input.required<any>();
-  theme = input.required<'light' | 'dark'>();
+  themeService = inject(ThemeService);
+  translationService = inject(TranslationService);
+  
   modelKey = input.required<string>();
+  theme = input.required<'light' | 'dark'>();
+  
+  t = computed(() => this.translationService.t());
+  currentLang = computed(() => this.translationService.currentLang());
   
   setModel = output<{key: string, closeMenu: boolean}>();
   closeMenu = output<void>();

@@ -2,6 +2,8 @@ import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { UiService } from '../services/ui.service';
 import { ImageService } from '../services/image.service';
+import { TranslationService } from '../services/translation.service';
+import { ThemeService } from '../services/theme.service';
 
 @Component({
   selector: 'app-image-view-modal',
@@ -36,9 +38,9 @@ import { ImageService } from '../services/image.service';
                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                </svg>
              }
-             <span class="font-semibold tracking-wide">Download</span>
+             <span class="font-semibold tracking-wide">{{ translationService.t().download }}</span>
            </button>
-
+ 
            <button (click)="share()" [disabled]="isLoading()"
               class="flex items-center gap-3 px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-md transition-all border border-white/10 shadow-lg hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
              @if (isLoading()) {
@@ -49,7 +51,7 @@ import { ImageService } from '../services/image.service';
                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9H18.75C19.9926 9 21 10.0074 21 11.25V18.75C21 19.9926 19.9926 21 18.75 21H5.25C4.00736 21 3 19.9926 3 18.75V11.25C3 10.0074 4.00736 9 5.25 9H8.25" />
                </svg>
              }
-             <span class="font-semibold tracking-wide">Share</span>
+             <span class="font-semibold tracking-wide">{{ translationService.t().share }}</span>
            </button>
         </div>
       </div>
@@ -59,6 +61,8 @@ import { ImageService } from '../services/image.service';
 export class ImageViewModalComponent {
   uiService = inject(UiService);
   imageService = inject(ImageService);
+  translationService = inject(TranslationService);
+  themeService = inject(ThemeService);
   isLoading = signal(false);
 
   close() {
