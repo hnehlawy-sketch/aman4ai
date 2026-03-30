@@ -1,4 +1,4 @@
-import { Injectable, signal, computed, effect } from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 import { translations } from '../translations';
 
 @Injectable({
@@ -6,11 +6,10 @@ import { translations } from '../translations';
 })
 export class TranslationService {
   currentLang = signal<'ar' | 'en'>('ar');
-  private allTranslations = translations;
 
   t = computed(() => {
     const lang = this.currentLang();
-    return this.allTranslations[lang] || this.allTranslations['ar'];
+    return translations[lang] || translations['ar'];
   });
 
   constructor() {
@@ -18,20 +17,14 @@ export class TranslationService {
     if (savedLang) {
       this.currentLang.set(savedLang);
     }
-
-    effect(() => {
-      const lang = this.currentLang();
-      localStorage.setItem('aman_lang', lang);
-      document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-      document.documentElement.lang = lang;
-    });
   }
 
-  setLanguage(lang: 'ar' | 'en') {
+  setLang(lang: 'ar' | 'en') {
     this.currentLang.set(lang);
+    localStorage.setItem('aman_lang', lang);
   }
 
-  toggleLanguage() {
-    this.currentLang.update(l => l === 'ar' ? 'en' : 'ar');
+  toggleLang() {
+    this.setLang(this.currentLang() === 'ar' ? 'en' : 'ar');
   }
 }

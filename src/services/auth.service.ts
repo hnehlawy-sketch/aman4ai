@@ -1,4 +1,4 @@
-import { Injectable, signal, inject, computed } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
 import { UserProfile, PaymentRequest, SystemSettings, OperationType, FirestoreErrorInfo } from '../models';
 import { StorageService } from './storage.service';
 
@@ -60,7 +60,6 @@ export class AuthService {
   dailyUsage = signal<number>(0);
   dailyLimit = signal<number>(60000);
   systemSettings = signal<SystemSettings | null>(null);
-  pricing = signal<any>(null);
   
   isFirestoreAvailable = signal<boolean>(true);
   
@@ -88,38 +87,11 @@ export class AuthService {
       }
       this.isLoading.set(false);
     });
-
-    // 3. Load System Settings and Pricing immediately (for guests too)
-    this.initBaseSettings();
-  }
-
-  private async initBaseSettings() {
-    console.log('[AuthService] Starting base settings initialization...');
-    try {
-      // Use Promise.allSettled to ensure one failure doesn't block the other
-      const results = await Promise.allSettled([
-        this.loadSystemSettings(),
-        this.getPricing().then(p => {
-          console.log('[AuthService] Pricing fetched successfully:', !!p);
-          this.pricing.set(p);
-        })
-      ]);
-      
-      results.forEach((res, idx) => {
-        if (res.status === 'rejected') {
-          console.error(`[AuthService] Initialization task ${idx} failed:`, res.reason);
-        }
-      });
-      
-      console.log('[AuthService] Base settings initialization completed');
-    } catch (e) {
-      console.error('[AuthService] Critical failure in initBaseSettings:', e);
-    }
   }
 
   private async testConnection() {
     try {
-      await getDoc(doc(this.db, 'test', 'connection'));
+      await getDocFromServer(doc(this.db, 'test', 'connection'));
       console.log('[AuthService] Firestore connection test successful');
       this.isFirestoreAvailable.set(true);
     } catch (error: any) {
@@ -278,25 +250,46 @@ export class AuthService {
       const uid = user.uid;
       const docRef = doc(this.db, 'users', uid);
       
-      console.log(`[AuthService] Syncing user ${uid} (${user.email}).`);
+      const adminEmails = ['admin@aman-ai.com', 'h.nehlawy@gmail.com', 'queeeensila@gmail.com'];
+      const shouldBeAdminByEmail = user.email ? adminEmails.includes(user.email) : false;
 
-      let docSnap;
-      try {
-        docSnap = await getDoc(docRef);
-      } catch (e: any) {
-        console.error('[AuthService] Firestore getDoc failed:', e.message);
-        return;
+      console.log(`[AuthService] Syncing user ${uid} (${user.email}). Premium by email: ${shouldBeAdminByEmail}`);
+
+      // Optimistically set premium if email matches
+      if (shouldBeAdminByEmail) {
+        this.isPremium.set(true);
       }
       
-      let isPremium = false;
-      let plan: 'free' | 'pro' | 'premium' = 'free';
+      let docSnap;
+      try {
+        // Try to get from server first to ensure we have latest status
+        docSnap = await getDocFromServer(docRef);
+      } catch (e: any) {
+        console.warn('[AuthService] Firestore getDocFromServer failed, trying cache:', e.message);
+        try {
+          docSnap = await getDoc(docRef);
+        } catch (cacheError: any) {
+          console.error('[AuthService] Firestore getDoc failed completely:', cacheError.message);
+          // If we are an admin by email, we should still allow access to the UI
+          if (!shouldBeAdminByEmail) return;
+        }
+      }
+      
+      let isPremium = shouldBeAdminByEmail;
+      let plan: 'free' | 'pro' | 'premium' = shouldBeAdminByEmail ? 'premium' : 'free';
       
       if (docSnap && docSnap.exists()) {
         const data = docSnap.data();
-        isPremium = data?.['isPremium'] || false;
+        isPremium = data?.['isPremium'] || shouldBeAdminByEmail;
         plan = data?.['plan'] || (isPremium ? 'premium' : 'free');
         
         console.log(`[AuthService] User exists in DB. Premium: ${isPremium}, Plan: ${plan}`);
+
+        // Ensure email-based admins are always recognized in DB
+        if (shouldBeAdminByEmail && (!data?.['isPremium'] || (data?.['plan'] !== 'premium' && data?.['plan'] !== 'pro'))) {
+          console.log('[AuthService] Updating premium status for email-based admin');
+          setDoc(docRef, { isPremium: true, plan: data?.['plan'] || 'premium' }, { merge: true }).catch(err => console.warn('Failed to update premium status:', err.message));
+        }
 
         // Update last login and profile info
         setDoc(docRef, { 
@@ -309,7 +302,8 @@ export class AuthService {
         // Create new record
         console.log('[AuthService] Creating new user record');
         try {
-          plan = 'free';
+          const shouldBeAdmin = shouldBeAdminByEmail;
+          plan = shouldBeAdmin ? 'premium' : 'free';
 
           await setDoc(docRef, { 
             uid: uid,
@@ -318,12 +312,12 @@ export class AuthService {
             photoURL: user.photoURL || null,
             createdAt: new Date().toISOString(),
             lastLogin: new Date().toISOString(),
-            isPremium: false,
+            isPremium: shouldBeAdmin,
             plan: plan,
             dailyUsage: 0,
             usageDate: new Date().toDateString()
           });
-          isPremium = false;
+          isPremium = shouldBeAdmin;
           this.dailyUsage.set(0);
           console.log(`[AuthService] New user record created. Premium: ${isPremium}`);
         } catch (e: any) {
@@ -471,40 +465,37 @@ export class AuthService {
     try {
       const settingsRef = doc(this.db, 'settings', 'system');
       const snap = await getDoc(settingsRef);
-      
       if (snap.exists()) {
         const settings = snap.data() as SystemSettings;
         this.systemSettings.set(settings);
-        console.log('[AuthService] System settings loaded from Firestore');
         return settings;
       } else {
-        console.warn('[AuthService] System settings document not found, using defaults');
         // Default settings
         const defaults: SystemSettings = {
           models: {
-            fast: 'gemini-2.5-flash-lite-preview-09-2025',
-            core: 'gemini-2.5-flash',
-            pro: 'gemini-2.5-pro',
+            fast: 'gemini-3-flash-preview',
+            core: 'gemini-3-flash-preview',
+            pro: 'gemini-3.1-pro-preview',
             image: 'gemini-2.5-flash-image',
-            live: 'gemini-2.5-flash-native-audio-preview-09-2025',
+            live: 'gemini-3.1-flash-live-preview',
             tts: 'gemini-2.5-flash-preview-tts'
           },
           limits: {
             free: 60000,
             pro: 200000
-          }
+          },
+          proxyUrl: 'https://important-pike-20.amanapp.deno.net'
         };
         this.systemSettings.set(defaults);
         return defaults;
       }
     } catch (e) {
-      console.error('[AuthService] Failed to load system settings', e);
-      const defaults: SystemSettings = {
+      console.warn('Failed to load system settings', e);
+      return this.systemSettings() || {
         models: { fast: '', core: '', pro: '', image: '', live: '', tts: '' },
-        limits: { free: 60000, pro: 200000 }
+        limits: { free: 60000, pro: 200000 },
+        proxyUrl: 'https://important-pike-20.amanapp.deno.net'
       };
-      this.systemSettings.set(defaults);
-      return defaults;
     }
   }
 
@@ -517,8 +508,7 @@ export class AuthService {
   // --- Payment Methods Management ---
   async getPaymentMethods(): Promise<any[]> {
     try {
-      const colRef = collection(this.db, 'payment_methods');
-      const snap = await getDocs(colRef);
+      const snap = await getDocs(collection(this.db, 'payment_methods'));
       return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (e: any) {
       console.warn('[AuthService] getPaymentMethods failed:', e.message);
@@ -529,37 +519,28 @@ export class AuthService {
   // --- Pricing Management ---
   async getPricing(): Promise<any> {
     try {
-      console.log('[AuthService] Fetching pricing from Firestore...');
       const docRef = doc(this.db, 'settings', 'pricing');
       const snap = await getDoc(docRef);
-      
-      let data: any;
       if (snap.exists()) {
-        data = snap.data();
-        console.log('[AuthService] Pricing loaded successfully:', data);
-      } else {
-        console.warn('[AuthService] Pricing document does not exist at settings/pricing, using defaults');
-        data = {
-          pro: {
-            monthly: { usd: 7, syp: 820 },
-            yearly: { usd: 70, syp: 8200 }
-          },
-          premium: {
-            monthly: { usd: 13, syp: 1520 },
-            yearly: { usd: 130, syp: 15200 }
-          }
-        };
+        return snap.data();
       }
-      this.pricing.set(data);
-      return data;
-    } catch (e: any) {
-      console.error('[AuthService] getPricing critical error:', e.message);
-      const defaultData = {
-        pro: { monthly: { usd: 7, syp: 820 }, yearly: { usd: 70, syp: 8200 } },
-        premium: { monthly: { usd: 13, syp: 1520 }, yearly: { usd: 130, syp: 15200 } }
+      // Default pricing if not set
+      return {
+        pro: {
+          monthly: { usd: 5, syp: 75000 },
+          yearly: { usd: 50, syp: 750000 }
+        },
+        premium: {
+          monthly: { usd: 10, syp: 150000 },
+          yearly: { usd: 100, syp: 1500000 }
+        }
       };
-      this.pricing.set(defaultData);
-      return defaultData;
+    } catch (e: any) {
+      console.warn('[AuthService] getPricing failed:', e.message);
+      return {
+        pro: { monthly: { usd: 5, syp: 75000 }, yearly: { usd: 50, syp: 750000 } },
+        premium: { monthly: { usd: 10, syp: 150000 }, yearly: { usd: 100, syp: 1500000 } }
+      };
     }
   }
 

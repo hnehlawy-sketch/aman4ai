@@ -78,6 +78,7 @@ export interface SystemSettings {
     pro: number;
   };
   mapsApiKey?: string;
+  proxyUrl?: string;
 }
 
 export enum OperationType {

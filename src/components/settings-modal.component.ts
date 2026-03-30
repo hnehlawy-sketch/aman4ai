@@ -141,7 +141,7 @@ export class SettingsModalComponent {
   });
 
   toggleLang() {
-    this.translationService.toggleLanguage();
+    this.translationService.toggleLang();
   }
 
   toggleTheme() {

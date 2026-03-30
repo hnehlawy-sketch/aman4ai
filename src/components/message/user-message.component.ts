@@ -9,7 +9,7 @@ import { TranslationService } from '../../services/translation.service';
   standalone: true,
   imports: [CommonModule],
   host: {
-    class: 'flex w-full mb-6',
+    class: 'flex w-full',
     '[class.justify-end]': 'currentLang() === "en"',
     '[class.justify-start]': 'currentLang() === "ar"'
   },
@@ -26,9 +26,9 @@ import { TranslationService } from '../../services/translation.service';
       <div class="flex items-end gap-2 mb-1"
            [class.flex-row]="currentLang() === 'en'"
            [class.flex-row-reverse]="currentLang() === 'ar'">
-        <div class="rounded-2xl px-4 py-2.5 bg-blue-600 text-white shadow-sm relative text-start"
-             [class.rounded-tr-sm]="currentLang() === 'en'"
-             [class.rounded-tl-sm]="currentLang() === 'ar'">
+        <div class="rounded-[1.5rem] px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 shadow-sm relative text-start"
+             [class.rounded-br-sm]="currentLang() === 'en'"
+             [class.rounded-bl-sm]="currentLang() === 'ar'">
           @for (file of message().files; track file.name) {
             @if (file.mimeType.startsWith('image/')) {
               <div class="mb-2 rounded-xl overflow-hidden border border-white/10 max-w-[200px] sm:max-w-xs relative group/img cursor-pointer" (click)="file.url ? uiService.openImageView(file.url) : null">
@@ -55,30 +55,25 @@ import { TranslationService } from '../../services/translation.service';
           
           @if (isEditing()) {
             <textarea 
-              class="w-full bg-white/20 text-white placeholder-white/50 rounded-xl p-2 text-sm focus:outline-none focus:ring-2 focus:ring-white/30 resize-none mt-1"
+              class="w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 rounded-xl p-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none mt-1"
               rows="3"
               [value]="editValue()"
               (input)="editValue.set($any($event.target).value)"
               dir="auto"
             ></textarea>
             <div class="flex justify-end gap-2 mt-2">
-              <button (click)="cancelEdit()" class="px-3 py-1 text-xs rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-white">{{ t().cancel || 'إلغاء' }}</button>
-              <button (click)="saveEdit()" class="px-3 py-1 text-xs rounded-lg bg-white text-blue-600 font-medium hover:bg-blue-50 transition-colors">{{ t().save || 'حفظ' }}</button>
+              <button (click)="cancelEdit()" class="px-3 py-1 text-xs rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors text-slate-700 dark:text-slate-300">{{ t().cancel || 'إلغاء' }}</button>
+              <button (click)="saveEdit()" class="px-3 py-1 text-xs rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors">{{ t().save || 'حفظ' }}</button>
             </div>
           } @else {
-            <div class="whitespace-pre-wrap leading-relaxed text-[0.95rem] font-normal">
+            <div class="whitespace-pre-wrap leading-7 text-base font-normal">
               {{ message().text }}
             </div>
             
             @if (message().isEdited) {
-              <div class="text-[10px] opacity-60 mt-1 italic text-left">{{ t().edited || 'تم التعديل' }}</div>
+              <div class="text-[10px] opacity-50 mt-1 italic text-left">{{ t().edited || 'تم التعديل' }}</div>
             }
           }
-        </div>
-        
-        <!-- User Avatar/Initial -->
-        <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-500 dark:text-slate-400 flex-shrink-0 mb-1">
-          U
         </div>
       </div>
       

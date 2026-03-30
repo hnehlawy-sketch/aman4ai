@@ -1,11 +1,6 @@
-<footer class="flex-none z-30 pt-4 px-4 pb-6 transition-all duration-300 ease-in-out relative backdrop-blur-md"
-        [class.bg-white/80]="theme() === 'light'"
-        [class.bg-[#0a0a0a]/80]="theme() === 'dark'"
-        [class.border-t]="true"
-        [class.border-slate-100]="theme() === 'light'"
-        [class.border-slate-800/50]="theme() === 'dark'"
+<footer class="flex-none z-30 px-4 pb-6 sm:pb-8 pt-2 transition-all duration-300 ease-in-out relative pointer-events-none"
         [dir]="currentLang() === 'ar' ? 'rtl' : 'ltr'">
-  <div class="max-w-3xl mx-auto space-y-4">
+  <div class="max-w-3xl mx-auto space-y-4 pointer-events-auto">
     
     <!-- SELECTED FILES PREVIEW -->
     @if (selectedFiles().length > 0) {
@@ -70,175 +65,144 @@
     }
 
     <!-- Input Container -->
-    <div class="relative group" [class.opacity-50]="isLimitExceeded()" [class.pointer-events-none]="isLimitExceeded()">
-      <div class="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-[2rem] blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity"></div>
+    <div class="relative group max-w-4xl mx-auto w-full px-2 sm:px-4" [class.opacity-50]="isLimitExceeded()" [class.pointer-events-none]="isLimitExceeded()">
       
-      <div class="relative flex flex-col rounded-[1.5rem] border transition-all duration-300 shadow-sm group-focus-within:shadow-xl group-focus-within:ring-4 group-focus-within:ring-indigo-500/5"
-           [class.bg-white]="theme() === 'light'"
-           [class.border-slate-200]="theme() === 'light'"
-           [class.bg-slate-900/80]="theme() === 'dark'"
-           [class.border-slate-800]="theme() === 'dark'"
-           [class.group-focus-within:border-indigo-500/50]="true">
+      <div class="relative flex flex-col rounded-2xl transition-all duration-300 shadow-sm hover:shadow-md focus-within:shadow-lg focus-within:ring-1 focus-within:ring-slate-300 dark:focus-within:ring-slate-600 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-1.5">
         
-        <!-- Feature Chips -->
-        <div class="flex items-center justify-between p-2 sm:p-3 border-b border-slate-100 dark:border-slate-800/50">
-          <!-- Model Selector -->
-          <button (click)="toggleInputModelMenu.emit()"
-                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all border hover:shadow-sm active:scale-95"
-                  [class.bg-indigo-50]="theme() === 'light'"
-                  [class.text-indigo-600]="theme() === 'light'"
-                  [class.border-indigo-100]="theme() === 'light'"
-                  [class.bg-indigo-900/20]="theme() === 'dark'"
-                  [class.text-indigo-300]="theme() === 'dark'"
-                  [class.border-indigo-900/50]="theme() === 'dark'">
-            <div class="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
-            <span class="whitespace-nowrap">{{ currentModelLabel() }}</span>
-            <mat-icon class="text-xs opacity-40">expand_more</mat-icon>
-          </button>
+        <!-- Top Options Row -->
+        <div class="flex items-center justify-between px-1 mb-1">
+          <div class="flex items-center gap-0.5">
+            <!-- Attach -->
+            <button (click)="fileInput.click()" 
+                    class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 transition-colors"
+                    [title]="t().upload">
+              <mat-icon class="text-[18px] w-[18px] h-[18px] flex items-center justify-center">attach_file</mat-icon>
+              <input #fileInput type="file" multiple class="hidden" (change)="onFileSelectedHandler($event)" accept=".pdf,.csv,.txt,.jpg,.jpeg,.png,.webp,.JPG,.JPEG,.PNG,.WEBP,.doc,.docx,.xls,.xlsx">
+            </button>
 
-          <div class="flex items-center gap-1.5 sm:gap-2">
+            <div class="w-px h-4 bg-slate-200 dark:bg-slate-800 mx-1"></div>
+
             <!-- Web Search Toggle -->
             <button (click)="toggleWebSearch.emit()"
-                    class="flex items-center justify-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-bold transition-all border hover:shadow-sm active:scale-95"
+                    class="p-1.5 rounded-lg transition-colors flex items-center justify-center"
+                    [class.text-emerald-600]="useWebSearch() && theme() === 'light'"
                     [class.bg-emerald-50]="useWebSearch() && theme() === 'light'"
-                  [class.text-emerald-600]="useWebSearch() && theme() === 'light'"
-                  [class.border-emerald-100]="useWebSearch() && theme() === 'light'"
-                  [class.bg-emerald-900/20]="useWebSearch() && theme() === 'dark'"
-                  [class.text-emerald-300]="useWebSearch() && theme() === 'dark'"
-                  [class.border-emerald-900/50]="useWebSearch() && theme() === 'dark'"
-                  [class.bg-slate-50]="!useWebSearch() && theme() === 'light'"
-                  [class.text-slate-500]="!useWebSearch() && theme() === 'light'"
-                  [class.border-slate-200]="!useWebSearch() && theme() === 'light'"
-                  [class.bg-slate-800/50]="!useWebSearch() && theme() === 'dark'"
-                  [class.text-slate-400]="!useWebSearch() && theme() === 'dark'"
-                  [class.border-slate-800]="!useWebSearch() && theme() === 'dark'">
-              <mat-icon class="text-sm">language</mat-icon>
-              <span class="hidden sm:inline whitespace-nowrap">{{ t().webSearch }}</span>
+                    [class.text-emerald-400]="useWebSearch() && theme() === 'dark'"
+                    [class.bg-emerald-500/10]="useWebSearch() && theme() === 'dark'"
+                    [class.text-slate-500]="!useWebSearch() && theme() === 'light'"
+                    [class.hover:bg-slate-100]="!useWebSearch() && theme() === 'light'"
+                    [class.text-slate-400]="!useWebSearch() && theme() === 'dark'"
+                    [class.hover:bg-slate-900]="!useWebSearch() && theme() === 'dark'"
+                    [title]="t().webSearch">
+              <mat-icon class="text-[18px] w-[18px] h-[18px] flex items-center justify-center">language</mat-icon>
             </button>
 
             <!-- Image Gen Toggle -->
             <button (click)="toggleGenerateImage.emit()"
-                    class="flex items-center justify-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-bold transition-all border hover:shadow-sm active:scale-95"
+                    class="p-1.5 rounded-lg transition-colors flex items-center justify-center"
+                    [class.text-purple-600]="generateImage() && theme() === 'light'"
                     [class.bg-purple-50]="generateImage() && theme() === 'light'"
-                  [class.text-purple-600]="generateImage() && theme() === 'light'"
-                  [class.border-purple-100]="generateImage() && theme() === 'light'"
-                  [class.bg-purple-900/20]="generateImage() && theme() === 'dark'"
-                  [class.text-purple-300]="generateImage() && theme() === 'dark'"
-                  [class.border-purple-900/50]="generateImage() && theme() === 'dark'"
-                  [class.bg-slate-50]="!generateImage() && theme() === 'light'"
-                  [class.text-slate-500]="!generateImage() && theme() === 'light'"
-                  [class.border-slate-200]="!generateImage() && theme() === 'light'"
-                  [class.bg-slate-800/50]="!generateImage() && theme() === 'dark'"
-                  [class.text-slate-400]="!generateImage() && theme() === 'dark'"
-                  [class.border-slate-800]="!generateImage() && theme() === 'dark'">
-              <mat-icon class="text-sm">palette</mat-icon>
-              <span class="hidden sm:inline whitespace-nowrap">{{ t().generateImage }}</span>
+                    [class.text-purple-400]="generateImage() && theme() === 'dark'"
+                    [class.bg-purple-500/10]="generateImage() && theme() === 'dark'"
+                    [class.text-slate-500]="!generateImage() && theme() === 'light'"
+                    [class.hover:bg-slate-100]="!generateImage() && theme() === 'light'"
+                    [class.text-slate-400]="!generateImage() && theme() === 'dark'"
+                    [class.hover:bg-slate-900]="!generateImage() && theme() === 'dark'"
+                    [title]="t().generateImage">
+              <mat-icon class="text-[18px] w-[18px] h-[18px] flex items-center justify-center">palette</mat-icon>
             </button>
 
             <!-- Live View Toggle -->
             <button (click)="openLiveView.emit()"
-                    class="flex items-center justify-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-bold transition-all border hover:shadow-sm active:scale-95 flex-shrink-0"
-                    [class.bg-red-50]="theme() === 'light'"
-                  [class.text-red-600]="theme() === 'light'"
-                  [class.border-red-100]="theme() === 'light'"
-                  [class.bg-red-900/20]="theme() === 'dark'"
-                  [class.text-red-300]="theme() === 'dark'"
-                  [class.border-red-900/50]="theme() === 'dark'">
-              <div class="relative flex items-center justify-center">
-                <mat-icon class="text-sm">graphic_eq</mat-icon>
-                <div class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
-              </div>
-              <span class="hidden sm:inline whitespace-nowrap">{{ t().liveChat }}</span>
+                    class="p-1.5 rounded-lg transition-colors flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                    [title]="t().liveChat">
+              <mat-icon class="text-[18px] w-[18px] h-[18px] flex items-center justify-center">graphic_eq</mat-icon>
             </button>
           </div>
 
-          <!-- Usage Indicator (Free/Pro Users Only) -->
-          @if (authService.userPlan() !== 'premium' && authService.user()) {
-            <div class="relative group flex items-center justify-center w-6 h-6 flex-shrink-0 cursor-help outline-none mx-1" tabindex="0">
-              <!-- Circular Progress -->
-              <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                <!-- Background Circle -->
-                <path class="text-gray-200 dark:text-slate-700" 
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      stroke-width="5" />
-                <!-- Progress Circle -->
-                <path class="text-black dark:text-white transition-all duration-500 ease-out" 
-                      [attr.stroke-dasharray]="usagePercentage() + ', 100'" 
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      stroke-width="5" 
-                      stroke-linecap="round" />
-              </svg>
-              
-              <!-- Tooltip -->
-              <div class="absolute bottom-full mb-3 start-0 sm:left-1/2 sm:-translate-x-1/2 w-40 sm:w-48 max-w-[calc(100vw-3rem)] p-2.5 sm:p-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] sm:text-[11px] rounded-xl shadow-xl opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity z-50 flex flex-col gap-0.5 sm:gap-1 text-center pointer-events-none">
-                <span class="font-black">{{ t().dailyLimit }}</span>
-                <div class="w-full h-1 bg-white/20 dark:bg-black/10 rounded-full overflow-hidden my-0.5 sm:my-1">
-                  <div class="h-full bg-blue-500 rounded-full transition-all duration-500" [style.width.%]="usagePercentage()"></div>
+          <div class="flex items-center gap-1">
+            <!-- Usage Indicator -->
+            @if (authService.userPlan() !== 'premium' && authService.user()) {
+              <div class="relative group flex items-center justify-center w-5 h-5 flex-shrink-0 cursor-help outline-none mx-1" tabindex="0">
+                <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                  <path class="text-slate-200 dark:text-slate-700" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="5" />
+                  <path class="text-slate-800 dark:text-slate-300 transition-all duration-500 ease-out" [attr.stroke-dasharray]="usagePercentage() + ', 100'" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" />
+                </svg>
+                <div class="absolute bottom-full mb-3 start-0 sm:left-1/2 sm:-translate-x-1/2 w-40 sm:w-48 max-w-[calc(100vw-3rem)] p-2.5 sm:p-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] sm:text-[11px] rounded-xl shadow-xl opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity z-50 flex flex-col gap-0.5 sm:gap-1 text-center pointer-events-none">
+                  <span class="font-black">{{ t().dailyLimit }}</span>
+                  <div class="w-full h-1 bg-white/20 dark:bg-black/10 rounded-full overflow-hidden my-0.5 sm:my-1">
+                    <div class="h-full bg-blue-500 rounded-full transition-all duration-500" [style.width.%]="usagePercentage()"></div>
+                  </div>
+                  <div class="flex items-center justify-center gap-1 font-black">
+                    <span>{{ authService.dailyUsage() | number }}</span>
+                    <span class="opacity-40">/</span>
+                    <span>{{ authService.dailyLimit() | number }}</span>
+                  </div>
+                  @if (usagePercentage() >= 90) {
+                    <span class="text-red-400 dark:text-red-600 font-black mt-0.5">{{ t().limitNear }}</span>
+                  }
+                  <div class="absolute top-full start-2 sm:left-1/2 sm:-translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-white"></div>
                 </div>
-                <div class="flex items-center justify-center gap-1 font-black">
-                  <span>{{ authService.dailyUsage() | number }}</span>
-                  <span class="opacity-40">/</span>
-                  <span>{{ authService.dailyLimit() | number }}</span>
-                </div>
-                @if (usagePercentage() >= 90) {
-                  <span class="text-red-400 dark:text-red-600 font-black mt-0.5">{{ t().limitNear }}</span>
-                }
-                <!-- Arrow -->
-                <div class="absolute top-full start-2 sm:left-1/2 sm:-translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-white"></div>
               </div>
-            </div>
-          }
+            }
+
+            <!-- Model Selector -->
+            <button (click)="toggleInputModelMenu.emit()"
+                    class="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800">
+              <span class="whitespace-nowrap">{{ currentModelLabel() }}</span>
+              <mat-icon class="text-[12px] w-[12px] h-[12px] flex items-center justify-center opacity-70">expand_more</mat-icon>
+            </button>
+          </div>
         </div>
 
-        <!-- Textarea & Actions -->
-        <div class="flex items-end gap-2 p-3">
-          <button (click)="fileInput.click()" 
-                  class="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-500 active:scale-90"
-                  [title]="t().upload">
-            <mat-icon>attach_file</mat-icon>
-            <input #fileInput type="file" multiple class="hidden" (change)="onFileSelectedHandler($event)" accept=".pdf,.csv,.txt,.jpg,.jpeg,.png,.webp,.JPG,.JPEG,.PNG,.WEBP,.doc,.docx,.xls,.xlsx">
-          </button>
+        <!-- Input Row -->
+        <div class="flex items-end gap-1 px-1">
+          <!-- Textarea -->
+          <div class="flex-1 min-w-0 py-1">
+            <textarea #chatTextarea
+              [placeholder]="isListening() ? t().listening : t().placeholder"
+              [value]="inputValue()"
+              (input)="onInput($event)"
+              (keydown)="onKeyDown($event)"
+              rows="1"
+              class="w-full bg-transparent border-none focus:ring-0 text-[15px] resize-none max-h-[160px] overflow-y-auto placeholder:text-slate-400 dark:text-slate-200 no-scrollbar leading-relaxed py-1.5"
+              dir="auto"
+            ></textarea>
+          </div>
 
-          <textarea #chatTextarea
-            [placeholder]="isListening() ? t().listening : t().placeholder"
-            [value]="inputValue()"
-            (input)="onInput($event)"
-            (keydown)="onKeyDown($event)"
-            rows="1"
-            class="flex-1 bg-transparent border-none focus:ring-0 text-sm sm:text-base py-2.5 resize-none max-h-48 overflow-y-auto placeholder:text-slate-400 dark:text-white no-scrollbar leading-relaxed"
-            dir="auto"
-          ></textarea>
-
-          <div class="flex items-center gap-1.5">
+          <!-- Actions -->
+          <div class="flex items-center gap-1 pb-1">
+            <!-- Mic -->
             <button (click)="onToggleVoice()" 
-                    class="p-2.5 rounded-xl transition-all active:scale-90"
+                    class="p-2 rounded-lg transition-all flex items-center justify-center"
                     [class.bg-red-500]="isListening()"
                     [class.text-white]="isListening()"
                     [class.text-slate-500]="!isListening()"
-                    [class.hover:bg-slate-100]="!isListening()"
-                    [class.dark:hover:bg-slate-800]="!isListening()"
+                    [class.hover:bg-slate-100]="!isListening() && theme() === 'light'"
+                    [class.dark:hover:bg-slate-900]="!isListening() && theme() === 'dark'"
                     [class.animate-pulse]="isListening()">
-              <mat-icon>{{ isListening() ? 'mic' : 'mic_none' }}</mat-icon>
+              <mat-icon class="text-[20px] w-[20px] h-[20px] flex items-center justify-center">{{ isListening() ? 'mic' : 'mic_none' }}</mat-icon>
             </button>
 
+            <!-- Stop / Send Button -->
             @if (isLoading() || isSending()) {
-              <!-- Stop Button -->
               <button (click)="stopGeneration.emit()"
-                      class="p-2.5 rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all active:scale-90 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
-                  <rect x="6" y="6" width="12" height="12" rx="2" />
-                </svg>
+                      class="p-2 rounded-lg bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 transition-all active:scale-95 flex items-center justify-center">
+                <mat-icon class="text-[20px] w-[20px] h-[20px] flex items-center justify-center">stop</mat-icon>
               </button>
             } @else {
-              <!-- Send Button -->
               <button (click)="onSendMessage()" 
-                      [disabled]="!inputValue().trim() && selectedFiles().length === 0"
-                      class="p-2.5 rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 disabled:opacity-30 disabled:shadow-none transition-all active:scale-90 flex items-center justify-center">
-                <mat-icon class="text-xl">send</mat-icon>
+                      [disabled]="(!inputValue().trim() && selectedFiles().length === 0) || isLimitExceeded()"
+                      class="p-2 rounded-lg flex items-center justify-center transition-all active:scale-95"
+                      [class.bg-black]="(inputValue().trim() || selectedFiles().length > 0) && theme() === 'light'"
+                      [class.text-white]="(inputValue().trim() || selectedFiles().length > 0) && theme() === 'light'"
+                      [class.bg-white]="(inputValue().trim() || selectedFiles().length > 0) && theme() === 'dark'"
+                      [class.text-black]="(inputValue().trim() || selectedFiles().length > 0) && theme() === 'dark'"
+                      [class.bg-slate-100]="!inputValue().trim() && selectedFiles().length === 0 && theme() === 'light'"
+                      [class.text-slate-400]="!inputValue().trim() && selectedFiles().length === 0 && theme() === 'light'"
+                      [class.bg-slate-800]="!inputValue().trim() && selectedFiles().length === 0 && theme() === 'dark'"
+                      [class.text-slate-500]="!inputValue().trim() && selectedFiles().length === 0 && theme() === 'dark'">
+                <mat-icon class="text-[20px] w-[20px] h-[20px] flex items-center justify-center" [class.rtl:-scale-x-100]="currentLang() === 'ar'">arrow_upward</mat-icon>
               </button>
             }
           </div>

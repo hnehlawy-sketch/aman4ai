@@ -1,4 +1,4 @@
-import { Component, input, output, inject, computed } from '@angular/core';
+import { Component, input, output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ThemeService } from '../services/theme.service';
 import { TranslationService } from '../services/translation.service';
@@ -12,13 +12,11 @@ import { TranslationService } from '../services/translation.service';
 export class InputModelMenuComponent {
   themeService = inject(ThemeService);
   translationService = inject(TranslationService);
-  
   modelKey = input.required<string>();
-  theme = input.required<'light' | 'dark'>();
   
-  t = computed(() => this.translationService.t());
-  currentLang = computed(() => this.translationService.currentLang());
-  
+  t = () => this.translationService.t();
+  theme = () => this.themeService.isDark() ? 'dark' : 'light';
+
   setModel = output<{key: string, closeMenu: boolean}>();
   closeMenu = output<void>();
 }

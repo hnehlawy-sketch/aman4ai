@@ -23,7 +23,7 @@ export interface ChatMessage {
   };
   functionCall?: any;
   functionResponse?: any;
-  files?: { mimeType: string, data?: string, name: string, url?: string }[];
+  fileData?: { mimeType: string, data?: string, name: string, url?: string };
   generatedImages?: { url: string | null, mimeType: string, alt?: string, isPending?: boolean }[]; 
   generatedFile?: { content: string; type: 'pdf' | 'docx' | 'txt'; filename: string };
 }
@@ -57,15 +57,11 @@ export class GeminiService {
       .map(msg => {
         const parts: any[] = [];
         if (msg.text) parts.push({ text: msg.text });
-        if (msg.files && msg.files.length > 0) {
-          msg.files.forEach(file => {
-            if (file.data) {
-              parts.push({
-                inlineData: {
-                  mimeType: file.mimeType,
-                  data: this.stripDataUrlPrefix(file.data)
-                }
-              });
+        if (msg.fileData && msg.fileData.data) {
+          parts.push({
+            inlineData: {
+              mimeType: msg.fileData.mimeType,
+              data: this.stripDataUrlPrefix(msg.fileData.data)
             }
           });
         }
@@ -173,15 +169,11 @@ export class GeminiService {
           if (msg.text) parts.push({ text: msg.text });
           if (msg.functionCall) parts.push({ functionCall: msg.functionCall });
           if (msg.functionResponse) parts.push({ functionResponse: msg.functionResponse });
-          if (msg.files && msg.files.length > 0) {
-            msg.files.forEach(file => {
-              if (file.data) {
-                parts.push({
-                  inlineData: {
-                    mimeType: file.mimeType,
-                    data: this.stripDataUrlPrefix(file.data)
-                  }
-                });
+          if (msg.fileData && msg.fileData.data) {
+            parts.push({
+              inlineData: {
+                mimeType: msg.fileData.mimeType,
+                data: this.stripDataUrlPrefix(msg.fileData.data)
               }
             });
           }
@@ -254,7 +246,7 @@ export class GeminiService {
         sys += `\nهام جداً: عند استخدام أدوات المواقع (searchLocation أو getDirections)، لا تقم بكتابة أي نص إضافي أو مقدمات. اكتفِ باستدعاء الأداة فقط، وسيقوم النظام بعرض الخريطة للمستخدم.`;
         sys += `\nإذا كان المستخدم يتحدث عن مكانين (من كذا إلى كذا)، فافترض دائماً أنه يريد مساراً واستخدم 'getDirections'.`;
         sys += `\nلديك أداة 'generateImage' لتوليد ورسم الصور. إذا طلب منك المستخدم صراحة رسم أو توليد أو تخيل صورة، استدعِ هذه الأداة فوراً ومرر لها وصفاً دقيقاً للصورة باللغة الإنجليزية.`;
-        sys += `\nلديك أداة 'generateDocument' لإنشاء ملفات Word أو PDF أو نصية. إذا طلب المستخدم إنشاء ملف أو تصدير نص إلى ملف أو "تنسيق" محتوى في ملف، يجب عليك استدعاء هذه الأداة فوراً. مرر لها المحتوى الكامل والنوع المطلوب واسم الملف. لا تكتفِ بالوعد بإنشاء الملف، بل استدعِ الأداة فعلياً.`;
+        sys += `\nهام جداً: إذا طلب المستخدم إنشاء ملف (PDF أو Word أو مستند)، استدعِ أداة 'generatePdfDocument' أو 'generateWordDocument' فوراً وبدون أي مقدمات أو اعتذار. لا تقل "لا يمكنني تقديم الملف مباشرة" بل استدعِ الأداة فقط وسيقوم النظام بتوفير رابط التحميل للمستخدم.`;
         
         if (options?.userProfile) {
           const p = options.userProfile;
@@ -269,6 +261,32 @@ export class GeminiService {
       const systemInstruction = { parts: [{ text: sys }] };
 
       const functionDeclarations = [
+        {
+          name: 'generatePdfDocument',
+          description: 'Generate a PDF document based on the provided content. Use this when the user asks to create, generate, or export a PDF file. The content should be well-formatted using markdown or plain text, supporting Arabic and English.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              title: { type: 'STRING', description: 'The title of the document' },
+              content: { type: 'STRING', description: 'The main body content of the document. Use markdown for formatting if needed.' },
+              filename: { type: 'STRING', description: 'The suggested filename (without extension)' }
+            },
+            required: ['title', 'content', 'filename']
+          }
+        },
+        {
+          name: 'generateWordDocument',
+          description: 'Generate a Word (DOCX) document based on the provided content. Use this when the user asks to create, generate, or export a Word or DOCX file. The content should be well-formatted, supporting Arabic and English.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              title: { type: 'STRING', description: 'The title of the document' },
+              content: { type: 'STRING', description: 'The main body content of the document. Use markdown for formatting if needed.' },
+              filename: { type: 'STRING', description: 'The suggested filename (without extension)' }
+            },
+            required: ['title', 'content', 'filename']
+          }
+        },
         {
           name: 'generateImage',
           description: 'Generate or draw an image based on a text prompt. Use this when the user explicitly asks to draw, generate, or create an image.',
@@ -314,19 +332,6 @@ export class GeminiService {
             },
             required: ['originQuery', 'destinationQuery']
           }
-        },
-        {
-          name: 'generateDocument',
-          description: 'Generate a Word (.docx), PDF, or Text (.txt) file based on the provided content. Use this when the user asks to "create a file", "export to word", "save as pdf", etc.',
-          parameters: {
-            type: 'OBJECT',
-            properties: {
-              content: { type: 'STRING', description: 'The full text content to be included in the document.' },
-              type: { type: 'STRING', enum: ['pdf', 'docx', 'txt'], description: 'The type of file to generate.' },
-              filename: { type: 'STRING', description: 'The desired filename (without extension).' }
-            },
-            required: ['content', 'type', 'filename']
-          }
         }
       ];
 
@@ -334,22 +339,19 @@ export class GeminiService {
       const userText = lastUserMsgForTools?.text || '';
       const imageKeywords = ['رسم', 'ارسم', 'صورة', 'صور', 'توليد', 'انشاء', 'تخيل', 'بدي', 'أريد', 'اريد', 'draw', 'generate', 'image', 'picture', 'photo', 'create', 'imagine'];
       const mapKeywords = ['خريطة', 'خرايط', 'خرائط', 'موقع', 'اين يقع', 'أين يقع', 'مسار', 'طريق', 'اتجاهات', 'map', 'location', 'where is', 'directions', 'route'];
-      const docKeywords = ['ملف', 'وورد', 'بي دي اف', 'نص', 'تصدير', 'حفظ', 'انشئ', 'أنشئ', 'سوي', 'اعمل', 'تنسيق', 'file', 'word', 'docx', 'pdf', 'txt', 'export', 'save', 'create', 'generate', 'format'];
+      const docKeywords = ['pdf', 'word', 'وورد', 'بي دي اف', 'مستند', 'ملف', 'document', 'file', 'docx'];
       
       const wantsImage = imageKeywords.some(k => userText.toLowerCase().includes(k));
       const wantsMap = mapKeywords.some(k => userText.toLowerCase().includes(k));
       const wantsDoc = docKeywords.some(k => userText.toLowerCase().includes(k));
 
       tools = [];
-      if (!options?.generateImage) {
-        // CRITICAL: Gemini API does not allow combining googleSearch and functionDeclarations in the same request.
-        // We prioritize functionDeclarations if the user intent matches our custom tools, 
-        // otherwise we use googleSearch if enabled.
-        if (options?.webSearch && !wantsImage && !wantsMap && !wantsDoc) {
-          tools.push({ googleSearch: {} });
-        } else {
-          tools.push({ functionDeclarations });
-        }
+      if (wantsImage || wantsMap || wantsDoc) {
+        tools.push({ functionDeclarations });
+      } else if (options?.webSearch) {
+        tools.push({ googleSearch: {} });
+      } else {
+        tools.push({ functionDeclarations });
       }
 
       const requestBody: any = {
@@ -651,6 +653,32 @@ export class GeminiService {
     const tools: any[] = [
       {
         functionDeclarations: [
+          {
+            name: 'generatePdfDocument',
+            description: 'Generate a PDF document based on the provided content.',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                title: { type: 'STRING', description: 'The title of the document' },
+                content: { type: 'STRING', description: 'The main body content of the document.' },
+                filename: { type: 'STRING', description: 'The suggested filename (without extension)' }
+              },
+              required: ['title', 'content', 'filename']
+            }
+          },
+          {
+            name: 'generateWordDocument',
+            description: 'Generate a Word (DOCX) document based on the provided content.',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                title: { type: 'STRING', description: 'The title of the document' },
+                content: { type: 'STRING', description: 'The main body content of the document.' },
+                filename: { type: 'STRING', description: 'The suggested filename (without extension)' }
+              },
+              required: ['title', 'content', 'filename']
+            }
+          },
           {
             name: 'generateImage',
             description: 'Generate or draw an image based on a text prompt.',

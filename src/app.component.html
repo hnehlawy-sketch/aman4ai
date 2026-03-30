@@ -1,27 +1,30 @@
 <div class="flex flex-col h-[100dvh] overflow-hidden relative transition-colors duration-300" 
      [dir]="currentLang() === 'ar' ? 'rtl' : 'ltr'"
-     [class.bg-slate-50]="theme() === 'light'"
-     [class.bg-[#0a0a0a]]="theme() === 'dark'">
+     [class.bg-slate-900]="theme() === 'dark'"
+     [class.text-white]="theme() === 'dark'"
+     [class.bg-white]="theme() === 'light'"
+     [class.text-slate-800]="theme() === 'light'">
   
   <!-- Firestore Connection Warning -->
   @if (!authService.isFirestoreAvailable()) {
-    <div class="bg-red-500 text-white px-4 py-1.5 text-center text-[11px] sm:text-sm font-medium flex flex-wrap items-center justify-center gap-x-3 gap-y-1 z-[60] animate-slide-up">
+    <div class="bg-red-500 text-white px-4 py-1.5 text-center text-[11px] sm:text-sm font-medium flex flex-wrap items-center justify-center gap-x-3 gap-y-1 z-[60] animate-slide-down">
       <div class="flex items-center gap-1.5">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5 flex-shrink-0">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
         </svg>
-        <span class="leading-tight">{{ t().dbError }}</span>
+        <span class="leading-tight">{{ currentLang() === 'ar' ? 'فشل الاتصال بقاعدة البيانات. قد تكون بعض الميزات غير متاحة.' : 'Database connection failed. Some features may be unavailable.' }}</span>
       </div>
       <button (click)="authService.forceSync()" class="underline font-bold hover:opacity-80 px-2 py-0.5 bg-white/10 rounded-md transition-colors">
-        {{ t().retry }}
+        {{ currentLang() === 'ar' ? 'إعادة المحاولة' : 'Retry' }}
       </button>
     </div>
   }
   
-  <!-- SIDEBAR OVERLAY -->
+  <!-- ================= APP CONTENT (Always Visible) ================= -->
+    
+  <!-- SIDEBAR -->
   @if (isSidebarOpen()) {
-    <div (click)="toggleSidebar()" 
-         class="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 sidebar-overlay fade-in"></div>
+    <div (click)="toggleSidebar()" class="fixed inset-0 bg-black/40 z-40 sidebar-overlay fade-in"></div>
   }
   
   <app-sidebar
@@ -42,8 +45,8 @@
   ></app-sidebar>
 
   <app-header
-    [theme]="theme()"
     [showUserMenu]="showUserMenu()"
+    [theme]="theme()"
     (toggleSidebar)="toggleSidebar()"
     (createNewChat)="createNewChat()"
     (toggleUserMenu)="showUserMenu.set(!showUserMenu())"
@@ -52,25 +55,18 @@
   ></app-header>
 
   <!-- CHAT AREA -->
-  <main class="flex-1 overflow-y-auto relative" 
-        [class.bg-slate-50]="theme() === 'light'" 
-        [class.bg-[#0a0a0a]]="theme() === 'dark'"
+  <main class="flex-1 overflow-y-auto p-4 sm:p-6" 
+        [class.bg-white]="theme() === 'light'" 
+        [class.bg-slate-900]="theme() === 'dark'"
         [dir]="currentLang() === 'ar' ? 'rtl' : 'ltr'"
-        (scroll)="onScroll($event)"
         #scrollContainer>
-    
-    <!-- Background Pattern (Optional for aesthetics) -->
-    <div class="absolute inset-0 opacity-[0.03] dark:opacity-[0.02] pointer-events-none"
-         [style.background-image]="'url(https://www.transparenttextures.com/patterns/cubes.png)'"></div>
-
-    <div class="max-w-4xl mx-auto flex flex-col min-h-full p-4 sm:p-6 pb-24 relative z-10">
+    <div class="max-w-3xl mx-auto flex flex-col min-h-full pb-4">
       
       @if (messages().length === 0) {
-        <div class="flex-1 flex flex-col items-center justify-center text-center opacity-100 animate-slide-up py-8 sm:py-12">
-           <!-- Logo with Glow -->
-           <div class="w-20 h-20 mb-6 relative flex items-center justify-center">
-             <div class="absolute inset-0 bg-blue-500/20 blur-2xl rounded-full animate-pulse"></div>
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="url(#logoGradientLarge)" class="w-20 h-20 drop-shadow-xl relative z-10">
+        <div class="flex-1 flex flex-col items-center justify-center text-center opacity-100 animate-slide-up py-6 sm:py-10">
+           <!-- Logo -->
+           <div class="w-16 h-16 mb-6 relative flex items-center justify-center">
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="url(#logoGradientLarge)" class="w-16 h-16 drop-shadow-lg">
                <defs>
                  <linearGradient id="logoGradientLarge" x1="0%" y1="0%" x2="100%" y2="100%">
                    <stop offset="0%" stop-color="#3b82f6" />
@@ -81,71 +77,53 @@
              </svg>
            </div>
 
-           <h2 class="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-3 tracking-tight">{{ t().greeting }}</h2>
-           <p class="text-lg sm:text-xl text-slate-500 dark:text-slate-400 mb-8 max-w-md mx-auto leading-relaxed">{{ t().greetingSub }}</p>
+           <h2 class="text-2xl sm:text-3xl font-medium text-slate-900 dark:text-white mb-2">{{ t().greeting }}</h2>
+           <h2 class="text-lg sm:text-xl font-medium opacity-50 mb-8">{{ t().greetingSub }}</h2>
            
-           <!-- Prompt Templates Row -->
-           <div class="w-full max-w-4xl">
-             <app-prompt-templates 
-               [t]="t()" 
-               [theme]="theme()" 
-               (usePrompt)="usePrompt($event)">
-             </app-prompt-templates>
-           </div>
+           <!-- Prompt Templates Row (Gemini Style) -->
+           <app-prompt-templates 
+             [t]="t()" 
+             [theme]="theme()" 
+             (usePrompt)="usePrompt($event)">
+           </app-prompt-templates>
         </div>
       }
 
-      <div class="flex flex-col gap-2">
-        @for (msg of messages(); track msg.id || $index) {
-          @if (!msg.isHidden && (
-            (msg.text && msg.text.trim().length > 0) || 
-            (msg.files && msg.files.length > 0) || 
-            msg.location || 
-            msg.route || 
-            (msg.generatedImages && msg.generatedImages.length > 0) || 
-            msg.functionCall ||
-            msg.generatedFile
-          )) {
-            @if (msg.role === 'user') {
-              <app-user-message
-                [message]="msg"
-                [t]="t()"
-                [currentLang]="currentLang()"
-                (onEdit)="editMessage($event)"
-                (onDelete)="deleteMessage($event)">
-              </app-user-message>
-            } @else {
-              <app-ai-message
-                [message]="msg"
-                [t]="t()"
-                [currentLang]="currentLang()"
-                (onDelete)="deleteMessage($event)">
-              </app-ai-message>
-            }
+      @for (msg of messages(); track msg.id || $index) {
+        @if (!msg.isHidden && (
+          (msg.text && msg.text.trim().length > 0) || 
+          (msg.files && msg.files.length > 0) || 
+          msg.location || 
+          msg.route || 
+          (msg.generatedImages && msg.generatedImages.length > 0) || 
+          msg.functionCall ||
+          msg.generatedFile
+        )) {
+          @if (msg.role === 'user') {
+            <app-user-message
+              [message]="msg"
+              [t]="t()"
+              (onEdit)="editMessage($event)"
+              (onDelete)="deleteMessage($event)">
+            </app-user-message>
+          } @else {
+            <app-ai-message
+              [message]="msg"
+              [t]="t()"
+              (onDelete)="deleteMessage($event)">
+            </app-ai-message>
           }
         }
-      </div>
+      }
 
       @if (isLoading()) {
-        <div class="mt-4">
-          <app-loading-indicator
-            [currentLang]="currentLang()"
-            [generateImage]="generateImage()"
-            [t]="t()">
-          </app-loading-indicator>
-        </div>
+        <app-loading-indicator
+          [currentLang]="currentLang()"
+          [generateImage]="generateImage()"
+          [t]="t()">
+        </app-loading-indicator>
       }
     </div>
-
-    <!-- Scroll to Bottom Button -->
-    @if (showScrollButton()) {
-      <button (click)="scrollToBottom()" 
-              class="fixed bottom-32 right-8 p-3 rounded-full bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-all animate-bounce z-50">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
-        </svg>
-      </button>
-    }
   </main>
 
   <app-chat-input
@@ -160,7 +138,7 @@
     [isListening]="isListening()"
     [isLoading]="isLoading()"
     [isSending]="isSending"
-    [selectedFiles]="selectedFiles()"
+    [selectedFiles]="selectedFile() ? [selectedFile()] : []"
     [showInputModelMenu]="showInputModelMenu()"
     (toggleInputModelMenu)="showInputModelMenu.set(!showInputModelMenu())"
     (toggleWebSearch)="useWebSearch.set(!useWebSearch())"
@@ -169,8 +147,8 @@
     (setModel)="setModel($event.key, $event.closeMenu)"
     (triggerFileUpload)="triggerFileUpload()"
     (onFileSelected)="onFileSelected($event)"
-    (removeFile)="removeFile($event)"
-    (clearFiles)="clearFiles()"
+    (removeFile)="clearFile()"
+    (clearFiles)="clearFile()"
     (updateInput)="updateInput($event)"
     (handleKeydown)="handleKeydown($event)"
     (startVoiceInput)="startVoiceInput()"
@@ -191,8 +169,6 @@
   <!-- Model Selector Bottom Sheet -->
   @if (showInputModelMenu()) {
     <app-input-model-menu
-      [t]="t()"
-      [theme]="theme()"
       [modelKey]="modelKey()"
       (setModel)="setModel($event.key, $event.closeMenu)"
       (closeMenu)="showInputModelMenu.set(false)"
@@ -201,6 +177,8 @@
 
   @if (uiService.authModalOpen()) {
     <app-auth-modal 
+      [t]="t()"
+      [theme]="theme()"
       (loginSuccess)="onLoginSuccess()">
     </app-auth-modal>
   }
@@ -234,6 +212,7 @@
 
   @if (uiService.liveViewOpen()) {
     <app-live-chat
+      [t]="t()"
       [(messages)]="messages">
     </app-live-chat>
   }
@@ -278,7 +257,7 @@
     </app-account-modal>
   }
 
-   @if (uiService.upgradeModalOpen()) {
+  @if (uiService.upgradeModalOpen()) {
     <app-upgrade-modal
       [t]="t()"
       [theme]="theme()"

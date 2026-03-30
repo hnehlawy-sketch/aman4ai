@@ -1,5 +1,6 @@
 import { Component, input, output, inject, signal, computed, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
 import { AuthService } from '../services/auth.service';
 import { UiService } from '../services/ui.service';
 import { TranslationService } from '../services/translation.service';
@@ -8,7 +9,7 @@ import { ChatSession } from '../models';
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, MatIconModule],
   templateUrl: './sidebar.component.html'
 })
 export class SidebarComponent {

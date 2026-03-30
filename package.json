@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "ng serve --host 0.0.0.0 --port 3000 --allowed-hosts",
+    "dev": "ng serve",
     "build": "ng build",
     "lint": "tsc --noEmit",
-    "preview": "ng serve --host 0.0.0.0 --port 3000 --configuration=production --allowed-hosts"
+    "preview": "ng serve --configuration=production"
   },
   "dependencies": {
     "@angular/build": "^21.1.0",
@@ -22,9 +22,7 @@
     "@angular/platform-browser": "^21.1.0",
     "@google/genai": "^1.42.0",
     "@google/generative-ai": "^0.24.1",
-    "@tailwindcss/postcss": "^4.2.2",
     "@types/dompurify": "^3.0.5",
-    "@types/file-saver": "^2.0.7",
     "@types/marked": "^5.0.2",
     "buffer": "^6.0.3",
     "d3": "^7.9.0",
@@ -33,15 +31,19 @@
     "file-saver": "^2.0.5",
     "firebase": "^12.9.0",
     "html2canvas": "^1.4.1",
+    "html2pdf.js": "^0.14.0",
     "idb": "^8.0.3",
-    "jspdf": "^2.5.2",
+    "jspdf": "^2.5.1",
     "marked": "^12.0.0",
+    "qrcode": "^1.5.4",
     "rxjs": "^7.8.2",
     "sharp": "^0.34.5",
     "tailwindcss": "latest"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "^22.14.0",
+    "@types/qrcode": "^1.5.6",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
