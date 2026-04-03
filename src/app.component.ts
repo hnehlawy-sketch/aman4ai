@@ -68,11 +68,6 @@ export const DEFAULT_PROFILE: UserProfile = {
 };
 
 import { DataLoggingService } from './services/data-logging.service';
-import { DocumentGeneratorService } from './services/document-generator.service';
-import { MatIconModule } from '@angular/material/icon';
-
-import { ThemeService } from './services/theme.service';
-import { TranslationService } from './services/translation.service';
 
 @Component({
   selector: 'app-root',
@@ -80,7 +75,6 @@ import { TranslationService } from './services/translation.service';
   imports: [
     CommonModule, 
     FormsModule, 
-    MatIconModule,
     MessageBubbleComponent,
     AuthModalComponent,
     SettingsModalComponent,
@@ -108,9 +102,6 @@ export class AppComponent implements OnInit {
   public uiService = inject(UiService);
   public imageService = inject(ImageService);
   public storageService = inject(StorageService);
-  public documentGeneratorService = inject(DocumentGeneratorService);
-  public themeService = inject(ThemeService);
-  public translationService = inject(TranslationService);
   private logger = inject(DataLoggingService);
   
   // -- PWA Install State --
@@ -118,12 +109,16 @@ export class AppComponent implements OnInit {
   showInstallPrompt = signal(false);
 
   // -- App Settings --
-  currentLang = this.translationService.currentLang;
-  theme = this.themeService.isDark;
+  currentLang: WritableSignal<'ar'|'en'> = signal('ar');
+  theme: WritableSignal<'light'|'dark'> = signal('light');
   modelKey: WritableSignal<'fast' | 'core' | 'pro'> = signal('fast');
   
   // -- Translations --
-  t = this.translationService.t;
+  private allTranslations = translations;
+  t = computed(() => {
+    const lang = this.currentLang();
+    return this.allTranslations[lang] || this.allTranslations['ar'];
+  });
 
   filteredSessions = computed(() => {
     const query = this.searchQuery().toLowerCase().trim();
@@ -147,7 +142,7 @@ export class AppComponent implements OnInit {
   abortController: AbortController | null = null;
   private messageSubscription: Subscription | null = null;
   private processedFunctionCalls = new Set<string>();
-  public isSending = false;
+  private isSending = false;
   private sessionUnsubscribe: Unsubscribe | null = null;
   private chatsUnsubscribe: Unsubscribe | null = null;
   private isSyncingFromRemote = false;
@@ -166,70 +161,6 @@ export class AppComponent implements OnInit {
   searchQuery = signal('');
   isLimitExceeded = signal(false);
   activeMenuId = signal<string | null>(null);
-  
-  // -- Circular Menu & Sub-options --
-  selectedCategory = signal<string | null>(null);
-  showSubOptions = signal(false);
-  
-  categories = [
-    { id: 'translate', icon: 'translate', color: '#3b82f6', bg: 'bg-blue-500/10' },
-    { id: 'brainstorm', icon: 'psychology', color: '#a855f7', bg: 'bg-purple-500/10' },
-    { id: 'summarize', icon: 'menu_book', color: '#10b981', bg: 'bg-emerald-500/10' },
-    { id: 'email', icon: 'mail', color: '#3b82f6', bg: 'bg-blue-500/10' }
-  ];
-
-  subOptionsMap: Record<string, { id: string, labelAr: string, labelEn: string, promptAr: string, promptEn: string }[]> = {
-    'translate': [
-      { id: 'ar-en', labelAr: 'من العربية للإنجليزية', labelEn: 'Arabic to English', promptAr: 'ترجم النص التالي من العربية إلى الإنجليزية باحترافية: ', promptEn: 'Translate the following text from Arabic to English professionally: ' },
-      { id: 'en-ar', labelAr: 'من الإنجليزية للعربية', labelEn: 'English to Arabic', promptAr: 'ترجم النص التالي من الإنجليزية إلى العربية باحترافية: ', promptEn: 'Translate the following text from English to Arabic professionally: ' },
-      { id: 'proofread', labelAr: 'تدقيق لغوي', labelEn: 'Proofreading', promptAr: 'قم بتدقيق النص التالي لغوياً وإملائياً مع الحفاظ على المعنى: ', promptEn: 'Proofread the following text for grammar and spelling while maintaining the meaning: ' },
-      { id: 'technical', labelAr: 'ترجمة تقنية', labelEn: 'Technical Translation', promptAr: 'ترجم النص التقني التالي بدقة عالية: ', promptEn: 'Translate the following technical text with high accuracy: ' }
-    ],
-    'brainstorm': [
-      { id: 'content', labelAr: 'أفكار لمحتوى', labelEn: 'Content Ideas', promptAr: 'اقترح علي أفكاراً إبداعية لمحتوى حول: ', promptEn: 'Suggest creative content ideas about: ' },
-      { id: 'problem', labelAr: 'حلول لمشكلات', labelEn: 'Problem Solving', promptAr: 'ساعدني في إيجاد حلول مبتكرة للمشكلة التالية: ', promptEn: 'Help me find innovative solutions for the following problem: ' },
-      { id: 'project', labelAr: 'تطوير مشاريع', labelEn: 'Project Development', promptAr: 'كيف يمكنني تطوير فكرة المشروع التالية: ', promptEn: 'How can I develop the following project idea: ' },
-      { id: 'brand', labelAr: 'أسماء تجارية', labelEn: 'Brand Names', promptAr: 'اقترح علي أسماء تجارية مميزة لـ: ', promptEn: 'Suggest unique brand names for: ' }
-    ],
-    'summarize': [
-      { id: 'article', labelAr: 'تلخيص مقال', labelEn: 'Summarize Article', promptAr: 'لخص لي المقال التالي بشكل موجز وواضح: ', promptEn: 'Summarize the following article concisely and clearly: ' },
-      { id: 'points', labelAr: 'استخراج النقاط الرئيسية', labelEn: 'Extract Key Points', promptAr: 'استخرج أهم النقاط الرئيسية من النص التالي: ', promptEn: 'Extract the most important key points from the following text: ' },
-      { id: 'simplify', labelAr: 'تبسيط مفاهيم معقدة', labelEn: 'Simplify Concepts', promptAr: 'اشرح لي هذا المفهوم المعقد بأسلوب بسيط وسهل: ', promptEn: 'Explain this complex concept in a simple and easy way: ' },
-      { id: 'meeting', labelAr: 'تلخيص اجتماعات', labelEn: 'Meeting Summary', promptAr: 'لخص لي محضر الاجتماع التالي مع ذكر القرارات المتخذة: ', promptEn: 'Summarize the following meeting minutes, mentioning the decisions made: ' }
-    ],
-    'email': [
-      { id: 'job', labelAr: 'طلب وظيفة', labelEn: 'Job Application', promptAr: 'اكتب لي إيميل احترافي للتقدم لوظيفة: ', promptEn: 'Write a professional email to apply for a job: ' },
-      { id: 'apology', labelAr: 'اعتذار رسمي', labelEn: 'Official Apology', promptAr: 'اكتب لي إيميل اعتذار رسمي بخصوص: ', promptEn: 'Write an official apology email regarding: ' },
-      { id: 'info', labelAr: 'طلب معلومات', labelEn: 'Info Request', promptAr: 'اكتب لي إيميل لطلب معلومات حول: ', promptEn: 'Write an email to request information about: ' },
-      { id: 'thanks', labelAr: 'شكر وتقدير', labelEn: 'Thank You', promptAr: 'اكتب لي إيميل شكر وتقدير لـ: ', promptEn: 'Write a thank you and appreciation email for: ' }
-    ]
-  };
-
-  currentSubOptions = computed(() => {
-    const cat = this.selectedCategory();
-    return cat ? this.subOptionsMap[cat] || [] : [];
-  });
-
-  selectedCategoryData = computed(() => {
-    const catId = this.selectedCategory();
-    return this.categories.find(c => c.id === catId);
-  });
-
-  selectCategory(catId: string) {
-    this.selectedCategory.set(catId);
-    this.showSubOptions.set(true);
-  }
-
-  selectSubOption(option: any) {
-    const prompt = this.currentLang() === 'ar' ? option.promptAr : option.promptEn;
-    this.usePrompt(prompt);
-    this.showSubOptions.set(false);
-  }
-
-  resetMenu() {
-    this.selectedCategory.set(null);
-    this.showSubOptions.set(false);
-  }
   
   // -- Multi-delete state --
   isSelectionMode = signal(false);
@@ -290,9 +221,20 @@ export class AppComponent implements OnInit {
       }
     });
 
+    const savedTheme = localStorage.getItem('aman_theme') as 'light' | 'dark';
+    if (savedTheme) this.theme.set(savedTheme);
+
     effect(() => {
       if (this.authService.userPlan() === 'premium') {
         this.isLimitExceeded.set(false);
+      }
+    });
+
+    effect(() => {
+      if (this.theme() === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
       }
     });
 
@@ -310,10 +252,10 @@ export class AppComponent implements OnInit {
     });
   }
 
-  async ngOnInit() {
+  ngOnInit() {
     this.setupSecurity();
-    await this.loadSessions();
-    // Always start a fresh new chat on app startup (won't be persisted until first message)
+    this.loadSessions();
+    // Always start a fresh new chat on app launch to show the home page
     this.createNewChat(false);
   }
 
@@ -401,10 +343,6 @@ export class AppComponent implements OnInit {
     }
   }
   
-  onAuthSuccess() {
-    this.onLoginSuccess();
-  }
-
   onLoginSuccess() {
     if (this.inputMessage() || this.selectedFile()) {
        this.sendMessage();
@@ -419,6 +357,7 @@ export class AppComponent implements OnInit {
     this.sessions.set([]);
     await this.authService.logout();
     this.showUserMenu.set(false);
+    this.createNewChat(false); // Return to home page after logout
   }
 
   getUserInitials(name: string): string {
@@ -837,14 +776,6 @@ export class AppComponent implements OnInit {
     this.selectedFile.set(null);
   }
 
-  removeFile(file: any) {
-    this.selectedFile.set(null);
-  }
-
-  clearFiles() {
-    this.selectedFile.set(null);
-  }
-
   stopGeneration() {
     if (this.abortController) {
       this.abortController.abort();
@@ -1232,55 +1163,6 @@ export class AppComponent implements OnInit {
         this.updateSystemMessage(tempId, errorMsg);
         this.sendFunctionResponse(call.name, { error: err.message || 'Route search failed' });
       }
-    } else if (call.name === 'createDownloadableFile') {
-      const { content, filename, fileType, language } = call.args;
-      this.isLoading.set(true);
-      const tempId = crypto.randomUUID();
-      this.messages.update(msgs => [...msgs, { id: tempId, role: 'system', text: `جاري إنشاء ملف ${fileType.toUpperCase()}...` }]);
-
-      try {
-        let blob: Blob;
-        const fullFilename = `${filename}.${fileType}`;
-        
-        if (fileType === 'pdf') {
-          blob = await this.documentGeneratorService.generatePDF(content, filename, language);
-        } else {
-          blob = await this.documentGeneratorService.generateDocx(content, filename, language);
-        }
-
-        const url = URL.createObjectURL(blob);
-        
-        this.messages.update(msgs => msgs.filter(m => m.id !== tempId));
-
-        this.messages.update(msgs => {
-          const newMsgs = [...msgs];
-          const lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
-          const fileData = { content, type: fileType, filename: fullFilename, url };
-          
-          if (lastModelIdx !== -1) {
-            newMsgs[lastModelIdx] = { ...newMsgs[lastModelIdx], generatedFile: fileData };
-          } else {
-            newMsgs.push({ id: crypto.randomUUID(), role: 'model', text: '', generatedFile: fileData });
-          }
-          
-          newMsgs.push({
-            id: crypto.randomUUID(),
-            role: 'user',
-            text: '',
-            isHidden: true,
-            functionResponse: {
-              name: call.name,
-              response: { success: true, filename: fullFilename, message: 'File generated successfully and link provided to user.' }
-            }
-          });
-          return newMsgs;
-        });
-
-        this.sendFunctionResponse(call.name, { success: true, filename: fullFilename, message: 'File generated successfully and link provided to user.' });
-      } catch (err: any) {
-        this.updateSystemMessage(tempId, 'حدث خطأ أثناء إنشاء الملف');
-        this.sendFunctionResponse(call.name, { error: err.message || 'File generation failed' });
-      }
     }
   }
 
@@ -1291,8 +1173,7 @@ export class AppComponent implements OnInit {
   async sendFunctionResponse(name: string, response: any) {
     let receivedFunctionCall = false;
 
-    // Remove the redundant empty message addition here to prevent empty bubbles
-    // this.messages.update(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: '' }]);
+    this.messages.update(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: '' }]);
 
     this.messageSubscription = this.geminiService.sendMessage(
       this.messages(),
@@ -1326,23 +1207,17 @@ export class AppComponent implements OnInit {
         
         this.messages.update(msgs => {
           const newMsgs = [...msgs];
-          let lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
-          
-          // If no model message exists or the last one is not empty, create a new one
-          if (lastModelIdx === -1 || (newMsgs[lastModelIdx].text && !receivedFunctionCall)) {
-            const newId = crypto.randomUUID();
-            newMsgs.push({ id: newId, role: 'model', text: '' });
-            lastModelIdx = newMsgs.length - 1;
+          const lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
+          if (lastModelIdx !== -1) {
+            const currentMsg = newMsgs[lastModelIdx];
+            let updatedMsg = { ...currentMsg };
+            if (res.textChunk !== undefined) {
+              updatedMsg.text = (updatedMsg.text || '') + res.textChunk;
+            } else if (res.finalText !== undefined) {
+              updatedMsg.text = res.finalText;
+            }
+            newMsgs[lastModelIdx] = updatedMsg;
           }
-
-          const currentMsg = newMsgs[lastModelIdx];
-          let updatedMsg = { ...currentMsg };
-          if (res.textChunk !== undefined) {
-            updatedMsg.text = (updatedMsg.text || '') + res.textChunk;
-          } else if (res.finalText !== undefined) {
-            updatedMsg.text = res.finalText;
-          }
-          newMsgs[lastModelIdx] = updatedMsg;
           return newMsgs;
         });
         this.scrollToBottom();
@@ -1364,124 +1239,24 @@ export class AppComponent implements OnInit {
   async sendMessage() {
     console.log('sendMessage called');
     if (this.isSending) return;
-    this.isSending = true;
-
-    if (!this.authService.user()) {
-      console.log('User not logged in, opening auth modal');
-      this.uiService.openAuthModal();
-      this.isSending = false;
-      return;
-    }
 
     const text = this.inputMessage().trim();
     const file = this.selectedFile();
+    
     if ((!text && !file) || this.isLoading()) {
-      console.log('Message is empty or loading is true. text:', text, 'file:', file, 'isLoading:', this.isLoading());
-      this.isSending = false;
       return;
     }
 
-    // Clear input and show loading immediately for better UX
-    this.inputMessage.set('');
-    this.selectedFile.set(null);
-    this.isLoading.set(true);
-    if (this.textarea?.nativeElement) this.textarea.nativeElement.style.height = 'auto';
+    if (!this.authService.user()) {
+      this.uiService.openAuthModal();
+      return;
+    }
 
+    this.isSending = true;
     const msgId = crypto.randomUUID();
     const modelMsgId = crypto.randomUUID();
 
-    // Add user message and model placeholder immediately for instant feedback
-    let useImageModel = this.generateImage();
-    const placeholderImages = useImageModel ? [{ url: null, mimeType: 'image/png', isPending: true }] : undefined;
-
-    this.messages.update(prev => [
-      ...prev,
-      { id: msgId, role: 'user', text: text, fileData: file ? { name: file.name, mimeType: file.mimeType, data: file.data } : undefined },
-      { id: modelMsgId, role: 'model', text: '', generatedImages: placeholderImages }
-    ]);
-
-    this.scrollToBottom();
-
-    // Auto-detect intent based on keywords
-    const textLower = text.toLowerCase();
-    
-    let preFetchedLocation: { lat: number, lng: number } | undefined;
-      try {
-        // Only pre-fetch if specifically asking for *current* location
-        const currentLocationKeywords = ['اين انا', 'أين أنا', 'موقعي', 'مكاني', 'وين انا', 'وينني'];
-        if (currentLocationKeywords.some(k => text.includes(k))) {
-          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000, enableHighAccuracy: true });
-          });
-          preFetchedLocation = {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude
-          };
-          console.log('Pre-fetched location:', preFetchedLocation);
-        }
-      } catch (err) {
-        console.warn('Could not pre-fetch location:', err);
-      }
-
-    // Determine final mode based on explicit UI toggles
-    useImageModel = this.generateImage();
-    let useWebSearch = this.useWebSearch();
-    
-    // If image generation is requested, disable web search to avoid tool conflict
-    if (useImageModel) {
-      useWebSearch = false;
-    }
-    
-    // Reset the image toggle for the NEXT message so it doesn't stick
-    this.generateImage.set(false);
-
-    const isPremium = this.authService.isPremium();
-    
-    let estimatedTokens = 0;
-
-    if (isPremium) {
-      estimatedTokens = 0; // Premium users have no limits, so we skip the expensive count check
-    } else {
-      // For free users, use accurate token counting from Gemini API
-      const tempMsg: ChatMessage = {
-        id: 'temp-count',
-        role: 'user',
-        text: text,
-        fileData: file ? { name: file.name, mimeType: file.mimeType, data: file.data } : undefined
-      };
-      
-      // We need to count the whole context that will be sent
-      const historyToCount = [...this.messages(), tempMsg];
-      
-      try {
-        const inputTokens = await this.geminiService.countTokens(historyToCount, { 
-          modelKey: this.modelKey(), 
-          generateImage: useImageModel 
-        });
-        // Add buffer for output (e.g. 800 tokens)
-        estimatedTokens = inputTokens + 800;
-        console.log('Accurate token count:', inputTokens, 'Total estimated:', estimatedTokens);
-      } catch (e) {
-        console.warn('Token counting failed, falling back to estimation', e);
-        estimatedTokens = Math.ceil(text.length / 4) + (file ? 1000 : 0) + 1000;
-      }
-    }
-
-    const allowed = await this.authService.checkAndIncrementUsage(estimatedTokens);
-
-    if (!allowed) {
-      console.log('Usage limit reached');
-      // Remove the messages we added optimistically
-      this.messages.update(prev => prev.filter(m => m.id !== msgId && m.id !== modelMsgId));
-      this.isLimitExceeded.set(true);
-      this.isLoading.set(false); // Reset loading if not allowed
-      this.isSending = false;
-      return;
-    }
-
-    console.log('Sending message...');
-    
-    // Ensure session exists in the list before sending
+    // 1. Ensure session exists in the list immediately
     const id = this.currentSessionId();
     const sessions = this.sessions();
     if (!sessions.some(s => s.id === id)) {
@@ -1495,7 +1270,78 @@ export class AppComponent implements OnInit {
       this.syncChatToFirestore(newSession);
     }
 
-    // Upload user file to Firebase Storage in the background if it exists
+    // 2. Add user message and model placeholder immediately for instant feedback
+    const useImageModel = this.generateImage();
+    const placeholderImages = useImageModel ? [{ url: null, mimeType: 'image/png', isPending: true }] : undefined;
+    
+    this.messages.update(prev => [
+      ...prev,
+      { id: msgId, role: 'user', text: text, fileData: file ? { name: file.name, mimeType: file.mimeType, data: file.data } : undefined },
+      { id: modelMsgId, role: 'model', text: '', generatedImages: placeholderImages }
+    ]);
+
+    // 3. Clear input and show loading immediately
+    this.inputMessage.set('');
+    this.selectedFile.set(null);
+    this.isLoading.set(true);
+    if (this.textarea?.nativeElement) this.textarea.nativeElement.style.height = 'auto';
+    this.scrollToBottom();
+
+    // 4. Perform background tasks (Location, Token counting, Usage check)
+    let preFetchedLocation: { lat: number, lng: number } | undefined;
+    try {
+      const currentLocationKeywords = ['اين انا', 'أين أنا', 'موقعي', 'مكاني', 'وين انا', 'وينني'];
+      if (currentLocationKeywords.some(k => text.includes(k))) {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000, enableHighAccuracy: true });
+        });
+        preFetchedLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      }
+    } catch (err) {
+      console.warn('Could not pre-fetch location:', err);
+    }
+
+    let useWebSearch = this.useWebSearch();
+    if (useImageModel) useWebSearch = false;
+    this.generateImage.set(false);
+
+    const isPremium = this.authService.isPremium();
+    let estimatedTokens = 0;
+
+    if (isPremium) {
+      estimatedTokens = 0;
+    } else {
+      try {
+        const tempMsg: ChatMessage = {
+          id: 'temp-count',
+          role: 'user',
+          text: text,
+          fileData: file ? { name: file.name, mimeType: file.mimeType, data: file.data } : undefined
+        };
+        const historyToCount = [...this.messages().slice(0, -2), tempMsg]; // Exclude the newly added user/model messages for counting
+        const inputTokens = await this.geminiService.countTokens(historyToCount, { 
+          modelKey: this.modelKey(), 
+          generateImage: useImageModel 
+        });
+        estimatedTokens = inputTokens + 800;
+      } catch (e) {
+        estimatedTokens = Math.ceil(text.length / 4) + (file ? 1000 : 0) + 1000;
+      }
+    }
+
+    const allowed = await this.authService.checkAndIncrementUsage(estimatedTokens);
+
+    if (!allowed) {
+      console.log('Usage limit reached');
+      this.isLimitExceeded.set(true);
+      this.isLoading.set(false);
+      this.isSending = false;
+      // Remove the messages if not allowed
+      this.messages.update(msgs => msgs.filter(m => m.id !== msgId && m.id !== modelMsgId));
+      return;
+    }
+
+    // 5. Background file upload
     if (file) {
       const user = this.authService.user();
       if (user) {
@@ -1510,20 +1356,17 @@ export class AppComponent implements OnInit {
       }
     }
 
-    const currentHistory = this.messages(); // Get the updated history including the placeholder
-
     this.abortController = new AbortController();
-    
     let receivedFunctionCall = false;
 
     this.messageSubscription = this.geminiService.sendMessage(
-      currentHistory,
+      this.messages(),
       this.authService.userPlan(),
       this.abortController.signal,
       {
         modelKey: this.modelKey(),
         userProfile: this.authService.userProfile(),
-        webSearch: useWebSearch, // Use the determined webSearch state
+        webSearch: useWebSearch,
         generateImage: useImageModel,
         location: preFetchedLocation,
         uid: this.authService.user()?.uid,

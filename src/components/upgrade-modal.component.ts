@@ -1,11 +1,10 @@
-import { Component, inject, output, signal, OnInit, input } from '@angular/core';
+import { Component, inject, output, signal, OnInit, input, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
 import { ThemeService } from '../services/theme.service';
 import { TranslationService } from '../services/translation.service';
 import { AuthService } from '../services/auth.service';
-import { UiService } from '../services/ui.service';
 import { UpgradePlansComponent } from './upgrade-plans.component';
 import { UpgradePaymentComponent } from './upgrade-payment.component';
 
@@ -19,10 +18,7 @@ export class UpgradeModalComponent implements OnInit {
   themeService = inject(ThemeService);
   translationService = inject(TranslationService);
   authService = inject(AuthService);
-  uiService = inject(UiService);
-
-  t = this.translationService.t;
-  currentLang = this.translationService.currentLang;
+  t = computed(() => this.translationService.t());
 
   close = output<void>();
   plan = input<'pro' | 'premium' | null>(null);

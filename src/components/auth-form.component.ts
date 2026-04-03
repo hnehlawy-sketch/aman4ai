@@ -1,55 +1,65 @@
-import { Component, input, output, inject } from '@angular/core';
+import { Component, output, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
+import { FormsModule } from '@angular/forms';
+import { AuthService } from '../services/auth.service';
 import { TranslationService } from '../services/translation.service';
 
 @Component({
   selector: 'app-auth-form',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, FormsModule],
   template: `
-    <form [formGroup]="authForm" (ngSubmit)="onSubmit()" class="space-y-4">
-      @if (mode() === 'signup') {
+    <div class="space-y-6">
+      <h2 class="text-2xl font-bold text-center dark:text-white">{{ t().loginTitle }}</h2>
+      <form (ngSubmit)="onSubmit()" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium mb-1">{{ t().name }}</label>
-          <input type="text" formControlName="name" class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+          <label class="block text-sm font-medium mb-1 dark:text-slate-300">{{ t().email }}</label>
+          <input type="email" [(ngModel)]="email" name="email" class="w-full p-2 rounded border bg-transparent dark:border-slate-700 dark:text-white" required>
         </div>
-      }
-      
-      <div>
-        <label class="block text-sm font-medium mb-1">{{ t().email }}</label>
-        <input type="email" formControlName="email" class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+        <div>
+          <label class="block text-sm font-medium mb-1 dark:text-slate-300">{{ t().password }}</label>
+          <input type="password" [(ngModel)]="password" name="password" class="w-full p-2 rounded border bg-transparent dark:border-slate-700 dark:text-white" required>
+        </div>
+        <button type="submit" class="w-full bg-indigo-600 text-white p-2 rounded hover:bg-indigo-700 transition-colors">
+          {{ t().loginBtn }}
+        </button>
+      </form>
+      <div class="relative">
+        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-300 dark:border-slate-700"></div></div>
+        <div class="relative flex justify-center text-sm"><span class="px-2 bg-white dark:bg-slate-900 text-gray-500">أو</span></div>
       </div>
-      
-      <div>
-        <label class="block text-sm font-medium mb-1">{{ t().password }}</label>
-        <input type="password" formControlName="password" class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-      </div>
-
-      <button type="submit" [disabled]="authForm.invalid || loading()" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-        {{ loading() ? t().processing : (mode() === 'login' ? t().loginBtn : t().signupBtn) }}
+      <button (click)="loginWithGoogle()" class="w-full flex items-center justify-center gap-2 border dark:border-slate-700 p-2 rounded hover:bg-gray-50 dark:hover:bg-white/5 transition-colors dark:text-white">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5">
+        {{ t().googleBtn }}
       </button>
-    </form>
+    </div>
   `
 })
 export class AuthFormComponent {
-  fb = inject(FormBuilder);
+  authService = inject(AuthService);
   translationService = inject(TranslationService);
-  t = this.translationService.t;
+  t = computed(() => this.translationService.t());
+  
+  email = '';
+  password = '';
+  
+  loginSuccess = output<void>();
 
-  mode = input.required<'login' | 'signup'>();
-  loading = input.required<boolean>();
-  submit = output<any>();
+  async onSubmit() {
+    try {
+      await this.authService.login(this.email, this.password);
+      this.loginSuccess.emit();
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
-  authForm = this.fb.group({
-    email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required, Validators.minLength(6)]],
-    name: ['']
-  });
-
-  onSubmit() {
-    if (this.authForm.valid) {
-      this.submit.emit(this.authForm.value);
+  async loginWithGoogle() {
+    try {
+      await this.authService.loginWithGoogle();
+      this.loginSuccess.emit();
+    } catch (e) {
+      console.error(e);
     }
   }
 }
