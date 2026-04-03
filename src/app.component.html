@@ -5,21 +5,6 @@
      [class.bg-white]="theme() === 'light'"
      [class.text-slate-800]="theme() === 'light'">
   
-  <!-- Firestore Connection Warning -->
-  @if (!authService.isFirestoreAvailable()) {
-    <div class="bg-red-500 text-white px-4 py-1.5 text-center text-[11px] sm:text-sm font-medium flex flex-wrap items-center justify-center gap-x-3 gap-y-1 z-[60] animate-slide-down">
-      <div class="flex items-center gap-1.5">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5 flex-shrink-0">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-        </svg>
-        <span class="leading-tight">{{ currentLang() === 'ar' ? 'فشل الاتصال بقاعدة البيانات. قد تكون بعض الميزات غير متاحة.' : 'Database connection failed. Some features may be unavailable.' }}</span>
-      </div>
-      <button (click)="authService.forceSync()" class="underline font-bold hover:opacity-80 px-2 py-0.5 bg-white/10 rounded-md transition-colors">
-        {{ currentLang() === 'ar' ? 'إعادة المحاولة' : 'Retry' }}
-      </button>
-    </div>
-  }
-  
   <!-- ================= APP CONTENT (Always Visible) ================= -->
     
   <!-- SIDEBAR -->
@@ -28,25 +13,34 @@
   }
   
   <app-sidebar
+    [t]="t()"
     [theme]="theme()"
+    [currentLang]="currentLang()"
     [isSidebarOpen]="isSidebarOpen()"
+    [searchQuery]="searchQuery()"
     [sessions]="sessions()"
+    [filteredSessions]="filteredSessions()"
     [currentSessionId]="currentSessionId()"
     [isSelectionMode]="isSelectionMode()"
     [selectedSessionIds]="selectedSessionIds()"
+    [activeMenuId]="activeMenuId()"
     (toggleSidebar)="toggleSidebar()"
     (createNewChat)="createNewChat()"
+    (searchQueryChange)="searchQuery.set($event)"
     (toggleSelectionMode)="toggleSelectionMode()"
     (deleteSelectedSessions)="deleteSelectedSessions()"
     (toggleSessionSelection)="toggleSessionSelection($event.event, $event.id)"
     (loadSession)="loadSession($event)"
+    (toggleMenu)="toggleMenu($event.event, $event.id)"
     (exportSession)="exportSession($event.event, $event.session)"
     (deleteSession)="deleteSession($event.event, $event.id)"
   ></app-sidebar>
 
   <app-header
-    [showUserMenu]="showUserMenu()"
+    [t]="t()"
     [theme]="theme()"
+    [currentLang]="currentLang()"
+    [showUserMenu]="showUserMenu()"
     (toggleSidebar)="toggleSidebar()"
     (createNewChat)="createNewChat()"
     (toggleUserMenu)="showUserMenu.set(!showUserMenu())"
@@ -58,75 +52,223 @@
   <main class="flex-1 overflow-y-auto p-4 sm:p-6" 
         [class.bg-white]="theme() === 'light'" 
         [class.bg-slate-900]="theme() === 'dark'"
-        [dir]="currentLang() === 'ar' ? 'rtl' : 'ltr'"
         #scrollContainer>
     <div class="max-w-3xl mx-auto flex flex-col min-h-full pb-4">
       
       @if (messages().length === 0) {
         <div class="flex-1 flex flex-col items-center justify-center text-center opacity-100 animate-slide-up py-6 sm:py-10">
-           <!-- Logo -->
-           <div class="w-16 h-16 mb-6 relative flex items-center justify-center">
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="url(#logoGradientLarge)" class="w-16 h-16 drop-shadow-lg">
-               <defs>
-                 <linearGradient id="logoGradientLarge" x1="0%" y1="0%" x2="100%" y2="100%">
-                   <stop offset="0%" stop-color="#3b82f6" />
-                   <stop offset="100%" stop-color="#8b5cf6" />
-                 </linearGradient>
-               </defs>
-               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-             </svg>
-           </div>
-
            <h2 class="text-2xl sm:text-3xl font-medium text-slate-900 dark:text-white mb-2">{{ t().greeting }}</h2>
            <h2 class="text-lg sm:text-xl font-medium opacity-50 mb-8">{{ t().greetingSub }}</h2>
            
-           <!-- Prompt Templates Row (Gemini Style) -->
-           <app-prompt-templates 
-             [t]="t()" 
-             [theme]="theme()" 
-             (usePrompt)="usePrompt($event)">
-           </app-prompt-templates>
-        </div>
-      }
+           <!-- Petal Menu (4-Quadrant Style) -->
+           @if (!selectedCategory()) {
+             <div class="petal-container">
+               <!-- Petal 1: Email (Top Start) -->
+               <button (click)="selectCategory('email')" 
+                 class="petal petal-1">
+                 <mat-icon>mail</mat-icon>
+                 <span class="petal-label">
+                   {{ currentLang() === 'ar' ? 'إيميل' : 'Email' }}
+                 </span>
+                 <span class="petal-desc">
+                   {{ currentLang() === 'ar' ? 'كتابة رسائل احترافية' : 'Write professional emails' }}
+                 </span>
+               </button>
+               
+               <!-- Petal 2: Translate (Top End) -->
+               <button (click)="selectCategory('translate')" 
+                 class="petal petal-2">
+                 <mat-icon>translate</mat-icon>
+                 <span class="petal-label">
+                   {{ currentLang() === 'ar' ? 'ترجمة' : 'Translate' }}
+                 </span>
+                 <span class="petal-desc">
+                   {{ currentLang() === 'ar' ? 'ترجمة نصوص فورية' : 'Instant text translation' }}
+                 </span>
+               </button>
+               
+               <!-- Petal 3: Summarize (Bottom Start) -->
+               <button (click)="selectCategory('summarize')" 
+                 class="petal petal-3">
+                 <mat-icon>menu_book</mat-icon>
+                 <span class="petal-label">
+                   {{ currentLang() === 'ar' ? 'تلخيص' : 'Summarize' }}
+                 </span>
+                 <span class="petal-desc">
+                   {{ currentLang() === 'ar' ? 'اختصار المحتوى الطويل' : 'Shorten long content' }}
+                 </span>
+               </button>
+               
+               <!-- Petal 4: Brainstorm (Bottom End) -->
+               <button (click)="selectCategory('brainstorm')" 
+                 class="petal petal-4">
+                 <mat-icon>psychology</mat-icon>
+                 <span class="petal-label">
+                   {{ currentLang() === 'ar' ? 'عصف ذهني' : 'Brainstorm' }}
+                 </span>
+                 <span class="petal-desc">
+                   {{ currentLang() === 'ar' ? 'توليد أفكار إبداعية' : 'Generate creative ideas' }}
+                 </span>
+               </button>
+               
+               <!-- Center Hub -->
+               <div class="petal-center">
+                 <mat-icon class="text-white !w-12 !h-12 !text-[48px]">shield</mat-icon>
+               </div>
+             </div>
+           } @else {
+             <!-- Selected Category Indicator -->
+             <div class="flex flex-col items-center gap-4 animate-scaleIn">
+               <div class="w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
+                 <mat-icon class="!w-8 !h-8 !text-[32px]">{{ selectedCategoryData()?.icon }}</mat-icon>
+               </div>
+               <h3 class="text-xl font-bold text-slate-700 dark:text-slate-300">
+                 {{ selectedCategory() === 'translate' ? (currentLang() === 'ar' ? 'ترجمة احترافية' : 'Professional Translation') : 
+                    selectedCategory() === 'brainstorm' ? (currentLang() === 'ar' ? 'عصف ذهني إبداعي' : 'Creative Brainstorming') : 
+                    selectedCategory() === 'summarize' ? (currentLang() === 'ar' ? 'تلخيص معلومات' : 'Information Summarization') : 
+                    (currentLang() === 'ar' ? 'كتابة إيميل رسمي' : 'Official Email Writing') }}
+               </h3>
+               <button (click)="resetMenu()" class="text-sm text-blue-500 hover:underline">
+                 {{ currentLang() === 'ar' ? 'تغيير القسم' : 'Change Category' }}
+               </button>
+             </div>
+           }
+         </div>
+       }
 
       @for (msg of messages(); track msg.id || $index) {
-        @if (!msg.isHidden && (
-          (msg.text && msg.text.trim().length > 0) || 
-          (msg.files && msg.files.length > 0) || 
-          msg.location || 
-          msg.route || 
-          (msg.generatedImages && msg.generatedImages.length > 0) || 
-          msg.functionCall ||
-          msg.generatedFile
-        )) {
-          @if (msg.role === 'user') {
-            <app-user-message
-              [message]="msg"
-              [t]="t()"
-              (onEdit)="editMessage($event)"
-              (onDelete)="deleteMessage($event)">
-            </app-user-message>
-          } @else {
-            <app-ai-message
-              [message]="msg"
-              [t]="t()"
-              (onDelete)="deleteMessage($event)">
-            </app-ai-message>
-          }
+        @if (!msg.isHidden) {
+          <app-message-bubble 
+            [message]="msg" 
+            (onEdit)="editMessage($event)" 
+            (onDelete)="deleteMessage($event)">
+          </app-message-bubble>
         }
       }
 
       @if (isLoading()) {
-        <app-loading-indicator
-          [currentLang]="currentLang()"
-          [generateImage]="generateImage()"
-          [t]="t()">
-        </app-loading-indicator>
+        <div class="flex w-full mb-6" [class.justify-start]="currentLang() === 'en'" [class.justify-end]="currentLang() === 'ar'">
+          <div class="flex flex-col gap-3 max-w-[90%] sm:max-w-[80%]">
+            
+            <!-- Loading Content -->
+            @if (generateImage()) {
+              <!-- Image Generation Placeholder (Aesthetic) -->
+              <div class="w-full max-w-md aspect-square rounded-3xl relative overflow-hidden shadow-2xl animate-pulse group">
+                <!-- Animated Gradient Background -->
+                <div class="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 animate-gradient-xy"></div>
+                
+                <!-- Glassmorphism Container -->
+                <div class="absolute inset-0 backdrop-blur-sm flex flex-col items-center justify-center gap-6 p-6">
+                  
+                  <!-- Floating Icon -->
+                  <div class="relative">
+                    <div class="absolute inset-0 bg-blue-500 blur-2xl opacity-20 animate-pulse"></div>
+                    <div class="w-20 h-20 rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-white/50 dark:border-white/10 shadow-xl flex items-center justify-center relative z-10 animate-bounce-slow">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="url(#paintGradient)" class="w-10 h-10">
+                        <defs>
+                          <linearGradient id="paintGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#3b82f6" />
+                            <stop offset="100%" stop-color="#a855f7" />
+                          </linearGradient>
+                        </defs>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09l2.846.813-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <!-- Text & Loading Dots -->
+                  <div class="flex flex-col items-center gap-2 relative z-10">
+                    <h3 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">
+                      {{ t().generatingImage || 'جاري رسم خيالك...' }}
+                    </h3>
+                    <div class="flex gap-1.5">
+                      <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                      <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                      <div class="w-2 h-2 bg-pink-500 rounded-full animate-bounce"></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Border Gradient -->
+                <div class="absolute inset-0 border-2 border-transparent rounded-3xl [background:linear-gradient(45deg,#3b82f6,#a855f7)_border-box] [mask:linear-gradient(#fff_0_0)_padding-box,linear-gradient(#fff_0_0)] [-webkit-mask-composite:destination-out] mask-composite:exclude opacity-50"></div>
+              </div>
+            } @else {
+              <!-- Glowing Wave Logo Loading -->
+              <div class="w-10 h-10 relative flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" class="w-8 h-8 drop-shadow-md">
+                  <defs>
+                    <linearGradient id="waveLoading" x1="0%" y1="0%" x2="200%" y2="200%">
+                      <stop offset="0%" stop-color="#3b82f6">
+                        <animate attributeName="stop-color" values="#3b82f6;#93c5fd;#3b82f6" dur="1.5s" repeatCount="indefinite" />
+                      </stop>
+                      <stop offset="50%" stop-color="#ffffff">
+                        <animate attributeName="stop-color" values="#ffffff;#eff6ff;#ffffff" dur="1.5s" repeatCount="indefinite" />
+                      </stop>
+                      <stop offset="100%" stop-color="#3b82f6">
+                        <animate attributeName="stop-color" values="#3b82f6;#93c5fd;#3b82f6" dur="1.5s" repeatCount="indefinite" />
+                      </stop>
+                    </linearGradient>
+                  </defs>
+                  <path fill="url(#waveLoading)" stroke="none" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                </svg>
+                <!-- Glow Effect -->
+                <div class="absolute inset-0 bg-blue-500/10 blur-lg rounded-full animate-pulse"></div>
+              </div>
+            }
+          </div>
+        </div>
       }
     </div>
   </main>
 
+  <!-- Sub-options Dropdown -->
+  @if (showSubOptions()) {
+    <div class="fixed inset-x-0 bottom-[90px] z-[100] px-4 pointer-events-none">
+      <div class="max-w-3xl mx-auto pointer-events-auto">
+        <div class="bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/50 dark:border-white/10 overflow-hidden animate-slideUpDropdown">
+          <!-- Header -->
+          <div class="p-4 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between bg-gray-50/50 dark:bg-slate-900/50">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+                <mat-icon>{{ selectedCategoryData()?.icon }}</mat-icon>
+              </div>
+              <div>
+                <span class="block font-bold text-slate-800 dark:text-white">
+                  {{ selectedCategory() === 'translate' ? (currentLang() === 'ar' ? 'خيارات الترجمة' : 'Translation Options') : 
+                     selectedCategory() === 'brainstorm' ? (currentLang() === 'ar' ? 'خيارات العصف الذهني' : 'Brainstorming Options') : 
+                     selectedCategory() === 'summarize' ? (currentLang() === 'ar' ? 'خيارات التلخيص' : 'Summarization Options') : 
+                     (currentLang() === 'ar' ? 'خيارات الإيميل' : 'Email Options') }}
+                </span>
+                <span class="text-xs text-slate-500 dark:text-slate-400">
+                  {{ currentLang() === 'ar' ? 'اختر نوع المهمة بدقة' : 'Select specific task type' }}
+                </span>
+              </div>
+            </div>
+            <button (click)="resetMenu()" class="p-2 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-500">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+          <!-- Options List -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 max-h-[45vh] overflow-y-auto custom-scrollbar">
+            @for (option of currentSubOptions(); track option.id) {
+              <button (click)="selectSubOption(option)"
+                class="flex items-center gap-4 p-4 rounded-2xl hover:bg-blue-50 dark:hover:bg-blue-900/30 text-start transition-all group border border-transparent hover:border-blue-200 dark:hover:border-blue-800">
+                <div class="w-10 h-10 rounded-xl bg-white dark:bg-slate-700 shadow-sm flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                  <mat-icon class="!w-6 !h-6 !text-[24px]">{{ currentLang() === 'ar' ? 'chevron_left' : 'chevron_right' }}</mat-icon>
+                </div>
+                <span class="text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors">
+                  {{ currentLang() === 'ar' ? option.labelAr : option.labelEn }}
+                </span>
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
   <app-chat-input
+    [t]="t()"
     [theme]="theme()"
     [currentModelLabel]="currentModelLabel()"
     [modelKey]="modelKey()"
@@ -137,8 +279,7 @@
     [inputMessage]="inputMessage()"
     [isListening]="isListening()"
     [isLoading]="isLoading()"
-    [isSending]="isSending"
-    [selectedFiles]="selectedFile() ? [selectedFile()] : []"
+    [selectedFile]="selectedFile()"
     [showInputModelMenu]="showInputModelMenu()"
     (toggleInputModelMenu)="showInputModelMenu.set(!showInputModelMenu())"
     (toggleWebSearch)="useWebSearch.set(!useWebSearch())"
@@ -147,8 +288,7 @@
     (setModel)="setModel($event.key, $event.closeMenu)"
     (triggerFileUpload)="triggerFileUpload()"
     (onFileSelected)="onFileSelected($event)"
-    (removeFile)="clearFile()"
-    (clearFiles)="clearFile()"
+    (clearFile)="clearFile()"
     (updateInput)="updateInput($event)"
     (handleKeydown)="handleKeydown($event)"
     (startVoiceInput)="startVoiceInput()"
@@ -157,11 +297,11 @@
   ></app-chat-input>
 
   <!-- ================= INSTALL PROMPT MODAL ================= -->
-  @if (pwaService.showInstallPrompt()) {
+  @if (showInstallPrompt()) {
     <app-install-prompt
       [t]="t()"
-      (installPwa)="pwaService.installPwa()"
-      (dismissInstall)="pwaService.dismissInstall()"
+      (installPwa)="installPwa()"
+      (dismissInstall)="dismissInstall()"
     ></app-install-prompt>
   }
 
@@ -169,6 +309,8 @@
   <!-- Model Selector Bottom Sheet -->
   @if (showInputModelMenu()) {
     <app-input-model-menu
+      [t]="t()"
+      [theme]="theme()"
       [modelKey]="modelKey()"
       (setModel)="setModel($event.key, $event.closeMenu)"
       (closeMenu)="showInputModelMenu.set(false)"
@@ -264,5 +406,4 @@
       [plan]="uiService.upgradePlan()">
     </app-upgrade-modal>
   }
-
 </div>

@@ -7,6 +7,7 @@ import { GeminiService, ChatMessage } from './services/gemini.service';
 import { AuthService } from './services/auth.service';
 import { UiService } from './services/ui.service';
 import { ImageService } from './services/image.service';
+import { MessageBubbleComponent } from './components/message-bubble.component';
 import { doc, setDoc, collection, writeBatch, getDocs, deleteDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { translations } from './translations';
 import { ChatSession, UserProfile } from './models';
@@ -67,8 +68,9 @@ export const DEFAULT_PROFILE: UserProfile = {
 };
 
 import { DataLoggingService } from './services/data-logging.service';
+import { DocumentGeneratorService } from './services/document-generator.service';
 
-import { PwaService } from './services/pwa.service';
+import { MatIconModule } from '@angular/material/icon';
 
 @Component({
   selector: 'app-root',
@@ -76,6 +78,8 @@ import { PwaService } from './services/pwa.service';
   imports: [
     CommonModule, 
     FormsModule, 
+    MatIconModule,
+    MessageBubbleComponent,
     AuthModalComponent,
     SettingsModalComponent,
     ExportModalComponent,
@@ -102,7 +106,7 @@ export class AppComponent implements OnInit {
   public uiService = inject(UiService);
   public imageService = inject(ImageService);
   public storageService = inject(StorageService);
-  public pwaService = inject(PwaService);
+  public documentGeneratorService = inject(DocumentGeneratorService);
   private logger = inject(DataLoggingService);
   
   // -- PWA Install State --
@@ -143,7 +147,7 @@ export class AppComponent implements OnInit {
   abortController: AbortController | null = null;
   private messageSubscription: Subscription | null = null;
   private processedFunctionCalls = new Set<string>();
-  isSending = false;
+  private isSending = false;
   private sessionUnsubscribe: Unsubscribe | null = null;
   private chatsUnsubscribe: Unsubscribe | null = null;
   private isSyncingFromRemote = false;
@@ -162,6 +166,70 @@ export class AppComponent implements OnInit {
   searchQuery = signal('');
   isLimitExceeded = signal(false);
   activeMenuId = signal<string | null>(null);
+  
+  // -- Circular Menu & Sub-options --
+  selectedCategory = signal<string | null>(null);
+  showSubOptions = signal(false);
+  
+  categories = [
+    { id: 'translate', icon: 'translate', color: '#3b82f6', bg: 'bg-blue-500/10' },
+    { id: 'brainstorm', icon: 'psychology', color: '#a855f7', bg: 'bg-purple-500/10' },
+    { id: 'summarize', icon: 'menu_book', color: '#10b981', bg: 'bg-emerald-500/10' },
+    { id: 'email', icon: 'mail', color: '#3b82f6', bg: 'bg-blue-500/10' }
+  ];
+
+  subOptionsMap: Record<string, { id: string, labelAr: string, labelEn: string, promptAr: string, promptEn: string }[]> = {
+    'translate': [
+      { id: 'ar-en', labelAr: 'من العربية للإنجليزية', labelEn: 'Arabic to English', promptAr: 'ترجم النص التالي من العربية إلى الإنجليزية باحترافية: ', promptEn: 'Translate the following text from Arabic to English professionally: ' },
+      { id: 'en-ar', labelAr: 'من الإنجليزية للعربية', labelEn: 'English to Arabic', promptAr: 'ترجم النص التالي من الإنجليزية إلى العربية باحترافية: ', promptEn: 'Translate the following text from English to Arabic professionally: ' },
+      { id: 'proofread', labelAr: 'تدقيق لغوي', labelEn: 'Proofreading', promptAr: 'قم بتدقيق النص التالي لغوياً وإملائياً مع الحفاظ على المعنى: ', promptEn: 'Proofread the following text for grammar and spelling while maintaining the meaning: ' },
+      { id: 'technical', labelAr: 'ترجمة تقنية', labelEn: 'Technical Translation', promptAr: 'ترجم النص التقني التالي بدقة عالية: ', promptEn: 'Translate the following technical text with high accuracy: ' }
+    ],
+    'brainstorm': [
+      { id: 'content', labelAr: 'أفكار لمحتوى', labelEn: 'Content Ideas', promptAr: 'اقترح علي أفكاراً إبداعية لمحتوى حول: ', promptEn: 'Suggest creative content ideas about: ' },
+      { id: 'problem', labelAr: 'حلول لمشكلات', labelEn: 'Problem Solving', promptAr: 'ساعدني في إيجاد حلول مبتكرة للمشكلة التالية: ', promptEn: 'Help me find innovative solutions for the following problem: ' },
+      { id: 'project', labelAr: 'تطوير مشاريع', labelEn: 'Project Development', promptAr: 'كيف يمكنني تطوير فكرة المشروع التالية: ', promptEn: 'How can I develop the following project idea: ' },
+      { id: 'brand', labelAr: 'أسماء تجارية', labelEn: 'Brand Names', promptAr: 'اقترح علي أسماء تجارية مميزة لـ: ', promptEn: 'Suggest unique brand names for: ' }
+    ],
+    'summarize': [
+      { id: 'article', labelAr: 'تلخيص مقال', labelEn: 'Summarize Article', promptAr: 'لخص لي المقال التالي بشكل موجز وواضح: ', promptEn: 'Summarize the following article concisely and clearly: ' },
+      { id: 'points', labelAr: 'استخراج النقاط الرئيسية', labelEn: 'Extract Key Points', promptAr: 'استخرج أهم النقاط الرئيسية من النص التالي: ', promptEn: 'Extract the most important key points from the following text: ' },
+      { id: 'simplify', labelAr: 'تبسيط مفاهيم معقدة', labelEn: 'Simplify Concepts', promptAr: 'اشرح لي هذا المفهوم المعقد بأسلوب بسيط وسهل: ', promptEn: 'Explain this complex concept in a simple and easy way: ' },
+      { id: 'meeting', labelAr: 'تلخيص اجتماعات', labelEn: 'Meeting Summary', promptAr: 'لخص لي محضر الاجتماع التالي مع ذكر القرارات المتخذة: ', promptEn: 'Summarize the following meeting minutes, mentioning the decisions made: ' }
+    ],
+    'email': [
+      { id: 'job', labelAr: 'طلب وظيفة', labelEn: 'Job Application', promptAr: 'اكتب لي إيميل احترافي للتقدم لوظيفة: ', promptEn: 'Write a professional email to apply for a job: ' },
+      { id: 'apology', labelAr: 'اعتذار رسمي', labelEn: 'Official Apology', promptAr: 'اكتب لي إيميل اعتذار رسمي بخصوص: ', promptEn: 'Write an official apology email regarding: ' },
+      { id: 'info', labelAr: 'طلب معلومات', labelEn: 'Info Request', promptAr: 'اكتب لي إيميل لطلب معلومات حول: ', promptEn: 'Write an email to request information about: ' },
+      { id: 'thanks', labelAr: 'شكر وتقدير', labelEn: 'Thank You', promptAr: 'اكتب لي إيميل شكر وتقدير لـ: ', promptEn: 'Write a thank you and appreciation email for: ' }
+    ]
+  };
+
+  currentSubOptions = computed(() => {
+    const cat = this.selectedCategory();
+    return cat ? this.subOptionsMap[cat] || [] : [];
+  });
+
+  selectedCategoryData = computed(() => {
+    const catId = this.selectedCategory();
+    return this.categories.find(c => c.id === catId);
+  });
+
+  selectCategory(catId: string) {
+    this.selectedCategory.set(catId);
+    this.showSubOptions.set(true);
+  }
+
+  selectSubOption(option: any) {
+    const prompt = this.currentLang() === 'ar' ? option.promptAr : option.promptEn;
+    this.usePrompt(prompt);
+    this.showSubOptions.set(false);
+  }
+
+  resetMenu() {
+    this.selectedCategory.set(null);
+    this.showSubOptions.set(false);
+  }
   
   // -- Multi-delete state --
   isSelectionMode = signal(false);
@@ -253,18 +321,11 @@ export class AppComponent implements OnInit {
     });
   }
 
-  ngOnInit() {
+  async ngOnInit() {
     this.setupSecurity();
-    this.loadSessions();
-    const sessions = this.sessions();
-    
-    if (sessions.length > 0) {
-      // Load the most recent session
-      this.loadSession(sessions[0].id, false);
-    } else {
-      // Start a fresh new chat (won't be persisted until first message)
-      this.createNewChat(false);
-    }
+    await this.loadSessions();
+    // Always start a fresh new chat on app startup (won't be persisted until first message)
+    this.createNewChat(false);
   }
 
   private setupSecurity() {
@@ -1170,18 +1231,30 @@ export class AppComponent implements OnInit {
         this.updateSystemMessage(tempId, errorMsg);
         this.sendFunctionResponse(call.name, { error: err.message || 'Route search failed' });
       }
-    } else if (call.name === 'generatePdfDocument') {
-      const { title, content, filename } = call.args;
+    } else if (call.name === 'createDownloadableFile') {
+      const { content, filename, fileType, language } = call.args;
       this.isLoading.set(true);
       const tempId = crypto.randomUUID();
-      this.messages.update(msgs => [...msgs, { id: tempId, role: 'system', text: `جاري إنشاء ملف PDF: ${title}...` }]);
+      this.messages.update(msgs => [...msgs, { id: tempId, role: 'system', text: `جاري إنشاء ملف ${fileType.toUpperCase()}...` }]);
 
       try {
+        let blob: Blob;
+        const fullFilename = `${filename}.${fileType}`;
+        
+        if (fileType === 'pdf') {
+          blob = await this.documentGeneratorService.generatePDF(content, filename, language);
+        } else {
+          blob = await this.documentGeneratorService.generateDocx(content, filename, language);
+        }
+
+        const url = URL.createObjectURL(blob);
+        
         this.messages.update(msgs => msgs.filter(m => m.id !== tempId));
+
         this.messages.update(msgs => {
           const newMsgs = [...msgs];
           const lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
-          const fileData = { content: `# ${title}\n\n${content}`, type: 'pdf' as const, filename };
+          const fileData = { content, type: fileType, filename: fullFilename, url };
           
           if (lastModelIdx !== -1) {
             newMsgs[lastModelIdx] = { ...newMsgs[lastModelIdx], generatedFile: fileData };
@@ -1196,51 +1269,16 @@ export class AppComponent implements OnInit {
             isHidden: true,
             functionResponse: {
               name: call.name,
-              response: { success: true, message: 'PDF generated and ready for download.' }
+              response: { success: true, filename: fullFilename, message: 'File generated successfully and link provided to user.' }
             }
           });
           return newMsgs;
         });
-        this.sendFunctionResponse(call.name, { success: true });
-      } catch (err: any) {
-        this.updateSystemMessage(tempId, 'حدث خطأ أثناء إنشاء ملف PDF');
-        this.sendFunctionResponse(call.name, { error: err.message || 'PDF generation failed' });
-      }
-    } else if (call.name === 'generateWordDocument') {
-      const { title, content, filename } = call.args;
-      this.isLoading.set(true);
-      const tempId = crypto.randomUUID();
-      this.messages.update(msgs => [...msgs, { id: tempId, role: 'system', text: `جاري إنشاء ملف Word: ${title}...` }]);
 
-      try {
-        this.messages.update(msgs => msgs.filter(m => m.id !== tempId));
-        this.messages.update(msgs => {
-          const newMsgs = [...msgs];
-          const lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
-          const fileData = { content: `${title}\n\n${content}`, type: 'docx' as const, filename };
-          
-          if (lastModelIdx !== -1) {
-            newMsgs[lastModelIdx] = { ...newMsgs[lastModelIdx], generatedFile: fileData };
-          } else {
-            newMsgs.push({ id: crypto.randomUUID(), role: 'model', text: '', generatedFile: fileData });
-          }
-          
-          newMsgs.push({
-            id: crypto.randomUUID(),
-            role: 'user',
-            text: '',
-            isHidden: true,
-            functionResponse: {
-              name: call.name,
-              response: { success: true, message: 'Word document generated and ready for download.' }
-            }
-          });
-          return newMsgs;
-        });
-        this.sendFunctionResponse(call.name, { success: true });
+        this.sendFunctionResponse(call.name, { success: true, filename: fullFilename, message: 'File generated successfully and link provided to user.' });
       } catch (err: any) {
-        this.updateSystemMessage(tempId, 'حدث خطأ أثناء إنشاء ملف Word');
-        this.sendFunctionResponse(call.name, { error: err.message || 'Word generation failed' });
+        this.updateSystemMessage(tempId, 'حدث خطأ أثناء إنشاء الملف');
+        this.sendFunctionResponse(call.name, { error: err.message || 'File generation failed' });
       }
     }
   }
@@ -1252,7 +1290,8 @@ export class AppComponent implements OnInit {
   async sendFunctionResponse(name: string, response: any) {
     let receivedFunctionCall = false;
 
-    this.messages.update(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: '' }]);
+    // Remove the redundant empty message addition here to prevent empty bubbles
+    // this.messages.update(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: '' }]);
 
     this.messageSubscription = this.geminiService.sendMessage(
       this.messages(),
@@ -1286,17 +1325,23 @@ export class AppComponent implements OnInit {
         
         this.messages.update(msgs => {
           const newMsgs = [...msgs];
-          const lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
-          if (lastModelIdx !== -1) {
-            const currentMsg = newMsgs[lastModelIdx];
-            let updatedMsg = { ...currentMsg };
-            if (res.textChunk !== undefined) {
-              updatedMsg.text = (updatedMsg.text || '') + res.textChunk;
-            } else if (res.finalText !== undefined) {
-              updatedMsg.text = res.finalText;
-            }
-            newMsgs[lastModelIdx] = updatedMsg;
+          let lastModelIdx = newMsgs.map(m => m.role).lastIndexOf('model');
+          
+          // If no model message exists or the last one is not empty, create a new one
+          if (lastModelIdx === -1 || (newMsgs[lastModelIdx].text && !receivedFunctionCall)) {
+            const newId = crypto.randomUUID();
+            newMsgs.push({ id: newId, role: 'model', text: '' });
+            lastModelIdx = newMsgs.length - 1;
           }
+
+          const currentMsg = newMsgs[lastModelIdx];
+          let updatedMsg = { ...currentMsg };
+          if (res.textChunk !== undefined) {
+            updatedMsg.text = (updatedMsg.text || '') + res.textChunk;
+          } else if (res.finalText !== undefined) {
+            updatedMsg.text = res.finalText;
+          }
+          newMsgs[lastModelIdx] = updatedMsg;
           return newMsgs;
         });
         this.scrollToBottom();
@@ -1340,6 +1385,20 @@ export class AppComponent implements OnInit {
     this.selectedFile.set(null);
     this.isLoading.set(true);
     if (this.textarea?.nativeElement) this.textarea.nativeElement.style.height = 'auto';
+
+    const msgId = crypto.randomUUID();
+    const modelMsgId = crypto.randomUUID();
+
+    // Add user message and model placeholder immediately for instant feedback
+    let useImageModel = this.generateImage();
+    const placeholderImages = useImageModel ? [{ url: null, mimeType: 'image/png', isPending: true }] : undefined;
+
+    this.messages.update(prev => [
+      ...prev,
+      { id: msgId, role: 'user', text: text, fileData: file ? { name: file.name, mimeType: file.mimeType, data: file.data } : undefined },
+      { id: modelMsgId, role: 'model', text: '', generatedImages: placeholderImages }
+    ]);
+
     this.scrollToBottom();
 
     // Auto-detect intent based on keywords
@@ -1364,7 +1423,7 @@ export class AppComponent implements OnInit {
       }
 
     // Determine final mode based on explicit UI toggles
-    let useImageModel = this.generateImage();
+    useImageModel = this.generateImage();
     let useWebSearch = this.useWebSearch();
     
     // If image generation is requested, disable web search to avoid tool conflict
@@ -1411,13 +1470,15 @@ export class AppComponent implements OnInit {
 
     if (!allowed) {
       console.log('Usage limit reached');
+      // Remove the messages we added optimistically
+      this.messages.update(prev => prev.filter(m => m.id !== msgId && m.id !== modelMsgId));
       this.isLimitExceeded.set(true);
       this.isLoading.set(false); // Reset loading if not allowed
+      this.isSending = false;
       return;
     }
 
     console.log('Sending message...');
-    const msgId = crypto.randomUUID();
     
     // Ensure session exists in the list before sending
     const id = this.currentSessionId();
@@ -1447,15 +1508,6 @@ export class AppComponent implements OnInit {
         });
       }
     }
-
-    this.messages.update(prev => [
-      ...prev,
-      { id: msgId, role: 'user', text: text, fileData: file ? { name: file.name, mimeType: file.mimeType, data: file.data } : undefined }
-    ]);
-
-    // Add a placeholder for the model's response immediately
-    const placeholderImages = useImageModel ? [{ url: null, mimeType: 'image/png', isPending: true }] : undefined;
-    this.messages.update(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: '', generatedImages: placeholderImages }]);
 
     const currentHistory = this.messages(); // Get the updated history including the placeholder
 

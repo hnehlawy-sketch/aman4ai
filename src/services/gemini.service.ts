@@ -25,7 +25,7 @@ export interface ChatMessage {
   functionResponse?: any;
   fileData?: { mimeType: string, data?: string, name: string, url?: string };
   generatedImages?: { url: string | null, mimeType: string, alt?: string, isPending?: boolean }[]; 
-  generatedFile?: { content: string; type: 'pdf' | 'docx' | 'txt'; filename: string };
+  generatedFile?: { content: string; type: 'pdf' | 'docx' | 'txt'; filename: string; url?: string };
 }
 
 @Injectable({
@@ -212,6 +212,9 @@ export class GeminiService {
       let sys = `أنت المساعد الذكي 'أمان'، تم تطويرك بواسطة 'فريق أمان'. يمنع ذكر Google أو Gemini. تصرف بشكل طبيعي ولا تبدأ كل رد بالتعريف عن نفسك.
       معلومة هامة جداً: اليوم هو ${currentDate} والوقت الحالي هو ${currentTime}. يجب عليك دائماً استخدام هذا التاريخ والوقت إذا سألك المستخدم عنهما، ولا تعتذر أبداً عن عدم معرفتك بهما.
       
+      لديك القدرة على إنشاء ملفات PDF و Word للمستخدم. إذا طلب المستخدم ملفاً (مثلاً "اكتب لي هذا في ملف PDF" أو "أريد ملف وورد للموضوع الفلاني")، يجب عليك استخدام أداة 'createDownloadableFile'.
+      عند استخدام هذه الأداة، قم بكتابة المحتوى الكامل والمنسق داخل الأداة، ولا تكتفِ بملخص.
+      
       معلومات الاشتراك:
       - خطة المستخدم الحالية: ${planDescriptions[userPlan]}
       - الخطط المتاحة في التطبيق:
@@ -246,7 +249,6 @@ export class GeminiService {
         sys += `\nهام جداً: عند استخدام أدوات المواقع (searchLocation أو getDirections)، لا تقم بكتابة أي نص إضافي أو مقدمات. اكتفِ باستدعاء الأداة فقط، وسيقوم النظام بعرض الخريطة للمستخدم.`;
         sys += `\nإذا كان المستخدم يتحدث عن مكانين (من كذا إلى كذا)، فافترض دائماً أنه يريد مساراً واستخدم 'getDirections'.`;
         sys += `\nلديك أداة 'generateImage' لتوليد ورسم الصور. إذا طلب منك المستخدم صراحة رسم أو توليد أو تخيل صورة، استدعِ هذه الأداة فوراً ومرر لها وصفاً دقيقاً للصورة باللغة الإنجليزية.`;
-        sys += `\nهام جداً: إذا طلب المستخدم إنشاء ملف (PDF أو Word أو مستند)، استدعِ أداة 'generatePdfDocument' أو 'generateWordDocument' فوراً وبدون أي مقدمات أو اعتذار. لا تقل "لا يمكنني تقديم الملف مباشرة" بل استدعِ الأداة فقط وسيقوم النظام بتوفير رابط التحميل للمستخدم.`;
         
         if (options?.userProfile) {
           const p = options.userProfile;
@@ -261,32 +263,6 @@ export class GeminiService {
       const systemInstruction = { parts: [{ text: sys }] };
 
       const functionDeclarations = [
-        {
-          name: 'generatePdfDocument',
-          description: 'Generate a PDF document based on the provided content. Use this when the user asks to create, generate, or export a PDF file. The content should be well-formatted using markdown or plain text, supporting Arabic and English.',
-          parameters: {
-            type: 'OBJECT',
-            properties: {
-              title: { type: 'STRING', description: 'The title of the document' },
-              content: { type: 'STRING', description: 'The main body content of the document. Use markdown for formatting if needed.' },
-              filename: { type: 'STRING', description: 'The suggested filename (without extension)' }
-            },
-            required: ['title', 'content', 'filename']
-          }
-        },
-        {
-          name: 'generateWordDocument',
-          description: 'Generate a Word (DOCX) document based on the provided content. Use this when the user asks to create, generate, or export a Word or DOCX file. The content should be well-formatted, supporting Arabic and English.',
-          parameters: {
-            type: 'OBJECT',
-            properties: {
-              title: { type: 'STRING', description: 'The title of the document' },
-              content: { type: 'STRING', description: 'The main body content of the document. Use markdown for formatting if needed.' },
-              filename: { type: 'STRING', description: 'The suggested filename (without extension)' }
-            },
-            required: ['title', 'content', 'filename']
-          }
-        },
         {
           name: 'generateImage',
           description: 'Generate or draw an image based on a text prompt. Use this when the user explicitly asks to draw, generate, or create an image.',
@@ -332,6 +308,20 @@ export class GeminiService {
             },
             required: ['originQuery', 'destinationQuery']
           }
+        },
+        {
+          name: 'createDownloadableFile',
+          description: 'Create a downloadable PDF or Word document based on the provided content. Use this when the user asks for a file, document, PDF, or Word file.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              content: { type: 'STRING', description: 'The full content of the document to be generated.' },
+              filename: { type: 'STRING', description: 'The suggested name for the file (without extension).' },
+              fileType: { type: 'STRING', enum: ['pdf', 'docx'], description: 'The type of file to generate.' },
+              language: { type: 'STRING', enum: ['ar', 'en'], description: 'The language of the content (ar for Arabic, en for English).' }
+            },
+            required: ['content', 'filename', 'fileType', 'language']
+          }
         }
       ];
 
@@ -339,14 +329,14 @@ export class GeminiService {
       const userText = lastUserMsgForTools?.text || '';
       const imageKeywords = ['رسم', 'ارسم', 'صورة', 'صور', 'توليد', 'انشاء', 'تخيل', 'بدي', 'أريد', 'اريد', 'draw', 'generate', 'image', 'picture', 'photo', 'create', 'imagine'];
       const mapKeywords = ['خريطة', 'خرايط', 'خرائط', 'موقع', 'اين يقع', 'أين يقع', 'مسار', 'طريق', 'اتجاهات', 'map', 'location', 'where is', 'directions', 'route'];
-      const docKeywords = ['pdf', 'word', 'وورد', 'بي دي اف', 'مستند', 'ملف', 'document', 'file', 'docx'];
+      const fileKeywords = ['ملف', 'بي دي اف', 'وورد', 'pdf', 'docx', 'word', 'document', 'مستند', 'تحميل'];
       
       const wantsImage = imageKeywords.some(k => userText.toLowerCase().includes(k));
       const wantsMap = mapKeywords.some(k => userText.toLowerCase().includes(k));
-      const wantsDoc = docKeywords.some(k => userText.toLowerCase().includes(k));
+      const wantsFile = fileKeywords.some(k => userText.toLowerCase().includes(k));
 
       tools = [];
-      if (wantsImage || wantsMap || wantsDoc) {
+      if (wantsImage || wantsMap || wantsFile) {
         tools.push({ functionDeclarations });
       } else if (options?.webSearch) {
         tools.push({ googleSearch: {} });
@@ -653,32 +643,6 @@ export class GeminiService {
     const tools: any[] = [
       {
         functionDeclarations: [
-          {
-            name: 'generatePdfDocument',
-            description: 'Generate a PDF document based on the provided content.',
-            parameters: {
-              type: 'OBJECT',
-              properties: {
-                title: { type: 'STRING', description: 'The title of the document' },
-                content: { type: 'STRING', description: 'The main body content of the document.' },
-                filename: { type: 'STRING', description: 'The suggested filename (without extension)' }
-              },
-              required: ['title', 'content', 'filename']
-            }
-          },
-          {
-            name: 'generateWordDocument',
-            description: 'Generate a Word (DOCX) document based on the provided content.',
-            parameters: {
-              type: 'OBJECT',
-              properties: {
-                title: { type: 'STRING', description: 'The title of the document' },
-                content: { type: 'STRING', description: 'The main body content of the document.' },
-                filename: { type: 'STRING', description: 'The suggested filename (without extension)' }
-              },
-              required: ['title', 'content', 'filename']
-            }
-          },
           {
             name: 'generateImage',
             description: 'Generate or draw an image based on a text prompt.',
