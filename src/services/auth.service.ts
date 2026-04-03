@@ -22,7 +22,7 @@ const firebaseConfig = {
 // Initialize Firebase once at module level
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
+export const db = getFirestore(app);
 const storage = getStorage(app);
 
 import { DataLoggingService } from './data-logging.service';

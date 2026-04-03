@@ -69,8 +69,10 @@ export const DEFAULT_PROFILE: UserProfile = {
 
 import { DataLoggingService } from './services/data-logging.service';
 import { DocumentGeneratorService } from './services/document-generator.service';
-
 import { MatIconModule } from '@angular/material/icon';
+
+import { ThemeService } from './services/theme.service';
+import { TranslationService } from './services/translation.service';
 
 @Component({
   selector: 'app-root',
@@ -107,6 +109,8 @@ export class AppComponent implements OnInit {
   public imageService = inject(ImageService);
   public storageService = inject(StorageService);
   public documentGeneratorService = inject(DocumentGeneratorService);
+  public themeService = inject(ThemeService);
+  public translationService = inject(TranslationService);
   private logger = inject(DataLoggingService);
   
   // -- PWA Install State --
@@ -114,16 +118,12 @@ export class AppComponent implements OnInit {
   showInstallPrompt = signal(false);
 
   // -- App Settings --
-  currentLang: WritableSignal<'ar'|'en'> = signal('ar');
-  theme: WritableSignal<'light'|'dark'> = signal('light');
+  currentLang = this.translationService.currentLang;
+  theme = this.themeService.isDark;
   modelKey: WritableSignal<'fast' | 'core' | 'pro'> = signal('fast');
   
   // -- Translations --
-  private allTranslations = translations;
-  t = computed(() => {
-    const lang = this.currentLang();
-    return this.allTranslations[lang] || this.allTranslations['ar'];
-  });
+  t = this.translationService.t;
 
   filteredSessions = computed(() => {
     const query = this.searchQuery().toLowerCase().trim();
@@ -147,7 +147,7 @@ export class AppComponent implements OnInit {
   abortController: AbortController | null = null;
   private messageSubscription: Subscription | null = null;
   private processedFunctionCalls = new Set<string>();
-  private isSending = false;
+  public isSending = false;
   private sessionUnsubscribe: Unsubscribe | null = null;
   private chatsUnsubscribe: Unsubscribe | null = null;
   private isSyncingFromRemote = false;
@@ -290,20 +290,9 @@ export class AppComponent implements OnInit {
       }
     });
 
-    const savedTheme = localStorage.getItem('aman_theme') as 'light' | 'dark';
-    if (savedTheme) this.theme.set(savedTheme);
-
     effect(() => {
       if (this.authService.userPlan() === 'premium') {
         this.isLimitExceeded.set(false);
-      }
-    });
-
-    effect(() => {
-      if (this.theme() === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
       }
     });
 
@@ -412,6 +401,10 @@ export class AppComponent implements OnInit {
     }
   }
   
+  onAuthSuccess() {
+    this.onLoginSuccess();
+  }
+
   onLoginSuccess() {
     if (this.inputMessage() || this.selectedFile()) {
        this.sendMessage();
@@ -841,6 +834,14 @@ export class AppComponent implements OnInit {
   }
 
   clearFile() {
+    this.selectedFile.set(null);
+  }
+
+  removeFile(file: any) {
+    this.selectedFile.set(null);
+  }
+
+  clearFiles() {
     this.selectedFile.set(null);
   }
 

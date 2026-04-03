@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ThemeService } from '../services/theme.service';
 import { TranslationService } from '../services/translation.service';
 import { AuthService } from '../services/auth.service';
+import { UiService } from '../services/ui.service';
 import { UpgradePlansComponent } from './upgrade-plans.component';
 import { UpgradePaymentComponent } from './upgrade-payment.component';
 
@@ -18,6 +19,10 @@ export class UpgradeModalComponent implements OnInit {
   themeService = inject(ThemeService);
   translationService = inject(TranslationService);
   authService = inject(AuthService);
+  uiService = inject(UiService);
+
+  t = this.translationService.t;
+  currentLang = this.translationService.currentLang;
 
   close = output<void>();
   plan = input<'pro' | 'premium' | null>(null);

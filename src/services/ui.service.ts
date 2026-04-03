@@ -64,7 +64,7 @@ export class UiService {
   openLiveView() { this.liveViewOpen.set(true); }
   closeLiveView() { this.liveViewOpen.set(false); }
 
-  openUpgradeModal(plan: 'pro' | 'premium') {
+  openUpgradeModal(plan: 'pro' | 'premium' | null = null) {
     if (!this.authService.user()) {
         this.openAuthModal();
         return;

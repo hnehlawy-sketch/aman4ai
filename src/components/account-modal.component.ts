@@ -112,6 +112,10 @@ export class AccountModalComponent implements OnInit {
   themeService = inject(ThemeService);
   translationService = inject(TranslationService);
 
+  t = this.translationService.t;
+  currentLang = this.translationService.currentLang;
+  isDark = this.themeService.isDark;
+
   email = signal('');
   mobile = signal('');
   displayName = signal('');

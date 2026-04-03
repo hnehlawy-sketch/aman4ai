@@ -1,20 +1,24 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Aman AI - المساعد الذكي
 
-# Run and deploy your AI Studio app
+هذا المشروع هو تطبيق Angular مدمج مع Gemini AI.
 
-This contains everything you need to run your app locally.
+## استخدام Docker
 
-View your app in AI Studio: https://ai.studio/apps/42f620f4-2cc5-47c0-aef3-7e4623695f56
+يمكنك بناء وتشغيل التطبيق باستخدام Docker باتباع الخطوات التالية:
 
-## Run Locally
+### 1. بناء الصورة (Build)
+```bash
+docker build -t aman-ai .
+```
 
-**Prerequisites:**  Node.js
+### 2. تشغيل الحاوية (Run)
+```bash
+docker run -d -p 8080:80 aman-ai
+```
 
+سيكون التطبيق متاحاً على `http://localhost:8080`.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## المميزات
+- واجهة مستخدم متجاوبة.
+- دعم كامل للغة العربية.
+- تكامل مع Firebase و Gemini AI.

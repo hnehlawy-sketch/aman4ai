@@ -235,7 +235,9 @@ export class LiveChatComponent implements OnDestroy {
   private logger = inject(DataLoggingService);
   private translationService = inject(TranslationService);
 
-  t = computed(() => this.translationService.t());
+  t = this.translationService.t;
+  currentLang = this.translationService.currentLang;
+
   messages = model<ChatMessage[]>([]);
   
   liveState = signal<'idle' | 'connecting' | 'listening' | 'speaking' | 'error'>('idle');

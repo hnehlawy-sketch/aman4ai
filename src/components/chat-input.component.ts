@@ -19,7 +19,7 @@ export class ChatInputComponent {
   el = inject(ElementRef);
   translationService = inject(TranslationService);
 
-  theme = input.required<'light' | 'dark'>();
+  theme = input.required<boolean>();
   currentModelLabel = input.required<string>();
   modelKey = input.required<string>();
   useWebSearch = input.required<boolean>();
@@ -32,12 +32,14 @@ export class ChatInputComponent {
   isSending = input.required<boolean>();
   selectedFiles = input.required<any[]>();
   showInputModelMenu = input.required<boolean>();
+  selectedFile = input<any>(null);
+  t = input.required<any>();
 
   toggleInputModelMenu = output<void>();
   toggleWebSearch = output<void>();
   toggleGenerateImage = output<void>();
   openLiveView = output<void>();
-  setModel = output<{key: string, closeMenu: boolean}>();
+  setModel = output<{key: 'pro' | 'fast' | 'core', closeMenu: boolean}>();
   triggerFileUpload = output<void>();
   onFileSelected = output<Event>();
   removeFile = output<number>();
@@ -48,8 +50,6 @@ export class ChatInputComponent {
   stopGeneration = output<void>();
   sendMessage = output<void>();
 
-  // -- Translations --
-  t = computed(() => this.translationService.t());
   currentLang = computed(() => this.translationService.currentLang());
 
   @ViewChild('chatTextarea') textarea!: ElementRef<HTMLTextAreaElement>;

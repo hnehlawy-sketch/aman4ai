@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { AuthService } from '../services/auth.service';
 import { UiService } from '../services/ui.service';
-import { ThemeService } from '../services/theme.service';
 import { TranslationService } from '../services/translation.service';
 
 @Component({
@@ -15,11 +14,10 @@ import { TranslationService } from '../services/translation.service';
 export class HeaderComponent {
   authService = inject(AuthService);
   uiService = inject(UiService);
-  themeService = inject(ThemeService);
   translationService = inject(TranslationService);
 
   showUserMenu = input.required<boolean>();
-  theme = input.required<'light' | 'dark'>();
+  theme = input.required<boolean>();
 
   toggleSidebar = output<void>();
   createNewChat = output<void>();
@@ -28,8 +26,8 @@ export class HeaderComponent {
   logout = output<void>();
 
   // -- Translations --
-  t = computed(() => this.translationService.t());
-  currentLang = computed(() => this.translationService.currentLang());
+  t = this.translationService.t;
+  currentLang = this.translationService.currentLang;
 
   getUserInitials(name: string): string {
     if (!name) return 'U';

@@ -1,10 +1,36 @@
 <div class="flex flex-col h-[100dvh] overflow-hidden relative transition-colors duration-300" 
      [dir]="currentLang() === 'ar' ? 'rtl' : 'ltr'"
-     [class.bg-slate-900]="theme() === 'dark'"
-     [class.text-white]="theme() === 'dark'"
-     [class.bg-white]="theme() === 'light'"
-     [class.text-slate-800]="theme() === 'light'">
+     [class.bg-slate-900]="theme()"
+     [class.text-white]="theme()"
+     [class.bg-white]="!theme()"
+     [class.text-slate-800]="!theme()">
   
+  <!-- INITIAL LOADING OVERLAY -->
+  @if (authService.isLoading()) {
+    <div class="fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-white dark:bg-slate-900 transition-all duration-500">
+      <div class="relative w-24 h-24 mb-6">
+        <!-- Outer Glowing Ring -->
+        <div class="absolute inset-0 rounded-full border-4 border-blue-500/20 animate-ping"></div>
+        <!-- Inner Spinning Ring -->
+        <div class="absolute inset-0 rounded-full border-t-4 border-blue-500 animate-spin"></div>
+        <!-- Center Logo -->
+        <div class="absolute inset-0 flex items-center justify-center">
+          <mat-icon class="!w-12 !h-12 !text-[48px] text-blue-500 drop-shadow-lg">shield</mat-icon>
+        </div>
+      </div>
+      <div class="flex flex-col items-center gap-2">
+        <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">
+          أمان AI
+        </h1>
+        <div class="flex gap-1.5">
+          <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+          <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+          <div class="w-2 h-2 bg-pink-500 rounded-full animate-bounce"></div>
+        </div>
+      </div>
+    </div>
+  }
+
   <!-- ================= APP CONTENT (Always Visible) ================= -->
     
   <!-- SIDEBAR -->
@@ -13,9 +39,7 @@
   }
   
   <app-sidebar
-    [t]="t()"
     [theme]="theme()"
-    [currentLang]="currentLang()"
     [isSidebarOpen]="isSidebarOpen()"
     [searchQuery]="searchQuery()"
     [sessions]="sessions()"
@@ -23,7 +47,7 @@
     [currentSessionId]="currentSessionId()"
     [isSelectionMode]="isSelectionMode()"
     [selectedSessionIds]="selectedSessionIds()"
-    [activeMenuId]="activeMenuId()"
+    [(activeMenuId)]="activeMenuId"
     (toggleSidebar)="toggleSidebar()"
     (createNewChat)="createNewChat()"
     (searchQueryChange)="searchQuery.set($event)"
@@ -37,9 +61,7 @@
   ></app-sidebar>
 
   <app-header
-    [t]="t()"
     [theme]="theme()"
-    [currentLang]="currentLang()"
     [showUserMenu]="showUserMenu()"
     (toggleSidebar)="toggleSidebar()"
     (createNewChat)="createNewChat()"
@@ -50,8 +72,8 @@
 
   <!-- CHAT AREA -->
   <main class="flex-1 overflow-y-auto p-4 sm:p-6" 
-        [class.bg-white]="theme() === 'light'" 
-        [class.bg-slate-900]="theme() === 'dark'"
+        [class.bg-white]="!theme()" 
+        [class.bg-slate-900]="theme()"
         #scrollContainer>
     <div class="max-w-3xl mx-auto flex flex-col min-h-full pb-4">
       
@@ -279,16 +301,19 @@
     [inputMessage]="inputMessage()"
     [isListening]="isListening()"
     [isLoading]="isLoading()"
+    [isSending]="isSending"
+    [selectedFiles]="[]"
     [selectedFile]="selectedFile()"
     [showInputModelMenu]="showInputModelMenu()"
     (toggleInputModelMenu)="showInputModelMenu.set(!showInputModelMenu())"
     (toggleWebSearch)="useWebSearch.set(!useWebSearch())"
     (toggleGenerateImage)="generateImage.set(!generateImage())"
     (openLiveView)="openLiveView()"
-    (setModel)="setModel($event.key, $event.closeMenu)"
+    (setModel)="setModel($any($event).key, $any($event).closeMenu)"
     (triggerFileUpload)="triggerFileUpload()"
     (onFileSelected)="onFileSelected($event)"
-    (clearFile)="clearFile()"
+    (removeFile)="removeFile($event)"
+    (clearFiles)="clearFiles()"
     (updateInput)="updateInput($event)"
     (handleKeydown)="handleKeydown($event)"
     (startVoiceInput)="startVoiceInput()"
@@ -299,7 +324,6 @@
   <!-- ================= INSTALL PROMPT MODAL ================= -->
   @if (showInstallPrompt()) {
     <app-install-prompt
-      [t]="t()"
       (installPwa)="installPwa()"
       (dismissInstall)="dismissInstall()"
     ></app-install-prompt>
@@ -309,35 +333,24 @@
   <!-- Model Selector Bottom Sheet -->
   @if (showInputModelMenu()) {
     <app-input-model-menu
-      [t]="t()"
-      [theme]="theme()"
       [modelKey]="modelKey()"
-      (setModel)="setModel($event.key, $event.closeMenu)"
+      (setModel)="setModel($any($event).key, $any($event).closeMenu)"
       (closeMenu)="showInputModelMenu.set(false)"
     ></app-input-model-menu>
   }
 
   @if (uiService.authModalOpen()) {
     <app-auth-modal 
-      [t]="t()"
-      [theme]="theme()"
-      (loginSuccess)="onLoginSuccess()">
+      (loginSuccess)="onAuthSuccess()">
     </app-auth-modal>
   }
 
   @if (uiService.settingsModalOpen()) {
-    <app-settings-modal
-      [t]="t()"
-      [themeSignal]="theme"
-      [langSignal]="currentLang"
-      [modelSignal]="modelKey">
-    </app-settings-modal>
+    <app-settings-modal></app-settings-modal>
   }
   
   @if (uiService.exportModalOpen()) {
     <app-export-modal
-      [t]="t()"
-      [theme]="theme()"
       [messages]="messages()"
       (close)="uiService.closeExportModal()">
     </app-export-modal>
@@ -345,16 +358,12 @@
 
   @if (uiService.personalizationModalOpen()) {
     <app-personalization-modal
-      [t]="t()"
-      [theme]="theme()"
-      [profileFormSignal]="profileForm"
       (profileSaved)="loadProfile()">
     </app-personalization-modal>
   }
 
   @if (uiService.liveViewOpen()) {
     <app-live-chat
-      [t]="t()"
       [(messages)]="messages">
     </app-live-chat>
   }
@@ -363,8 +372,6 @@
     <app-info-modal
       [type]="uiService.infoModalType()"
       [title]="uiService.infoModalTitle()"
-      [theme]="theme()"
-      [t]="t()"
       (close)="uiService.closeInfoModal()">
     </app-info-modal>
   }
@@ -393,17 +400,14 @@
   }
 
   @if (uiService.accountModalOpen()) {
-    <app-account-modal
-      [t]="t()"
-      [theme]="theme()">
+    <app-account-modal>
     </app-account-modal>
   }
 
   @if (uiService.upgradeModalOpen()) {
     <app-upgrade-modal
-      [t]="t()"
-      [theme]="theme()"
-      [plan]="uiService.upgradePlan()">
+      [plan]="uiService.upgradePlan()"
+      (close)="uiService.closeUpgradeModal()">
     </app-upgrade-modal>
   }
 </div>

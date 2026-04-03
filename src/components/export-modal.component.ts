@@ -6,6 +6,7 @@ import html2canvas from 'html2canvas';
 import { Document, Packer, Paragraph, TextRun, AlignmentType, ShadingType } from 'docx';
 import saveAs from 'file-saver';
 import { TranslationService } from '../services/translation.service';
+import { ThemeService } from '../services/theme.service';
 
 @Component({
   selector: 'app-export-modal',
@@ -15,10 +16,10 @@ import { TranslationService } from '../services/translation.service';
     <div class="fixed inset-0 z-[70] flex items-center justify-center p-4">
        <div (click)="close.emit()" class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-[fadeIn_0.2s_ease-out]"></div>
        <div class="w-full max-w-sm rounded-3xl shadow-2xl p-6 relative z-10 animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)]"
-            [class.bg-white]="theme() === 'light'"
-            [class.bg-slate-900]="theme() === 'dark'"
-            [class.border]="theme() === 'dark'"
-            [class.border-slate-800]="theme() === 'dark'">
+            [class.bg-white]="!themeService.isDark()"
+            [class.bg-slate-900]="themeService.isDark()"
+            [class.border]="themeService.isDark()"
+            [class.border-slate-800]="themeService.isDark()">
          
          <div class="flex flex-col items-center text-center">
             <h2 class="text-xl font-bold mb-4">{{ t().exportTitle }}</h2>
@@ -48,12 +49,13 @@ import { TranslationService } from '../services/translation.service';
 })
 export class ExportModalComponent {
   translationService = inject(TranslationService);
-  theme = input<'light' | 'dark'>('light');
+  themeService = inject(ThemeService);
+  
   messages = input<ChatMessage[]>([]);
   close = output<void>();
 
-  t = computed(() => this.translationService.t());
-  currentLang = computed(() => this.translationService.currentLang());
+  t = this.translationService.t;
+  currentLang = this.translationService.currentLang;
 
   isExporting = signal(false);
 

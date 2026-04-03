@@ -1,4 +1,4 @@
-import { Component, input, output, inject, signal, computed, HostListener } from '@angular/core';
+import { Component, input, output, inject, signal, computed, HostListener, model } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { AuthService } from '../services/auth.service';
@@ -18,12 +18,15 @@ export class SidebarComponent {
   translationService = inject(TranslationService);
 
   // -- Inputs --
-  theme = input.required<'light' | 'dark'>();
+  theme = input.required<boolean>();
   isSidebarOpen = input.required<boolean>();
   sessions = input.required<ChatSession[]>();
   currentSessionId = input.required<string>();
   isSelectionMode = input.required<boolean>();
   selectedSessionIds = input.required<Set<string>>();
+  searchQuery = input.required<string>();
+  filteredSessions = input.required<ChatSession[]>();
+  activeMenuId = model<string | null>(null);
 
   // -- Outputs --
   toggleSidebar = output<void>();
@@ -34,45 +37,29 @@ export class SidebarComponent {
   loadSession = output<string>();
   exportSession = output<{event: MouseEvent, session: ChatSession}>();
   deleteSession = output<{event: MouseEvent, id: string}>();
+  searchQueryChange = output<string>();
+  toggleMenu = output<{event: MouseEvent, id: string}>();
 
   // -- Translations --
-  t = computed(() => this.translationService.t());
-  currentLang = computed(() => this.translationService.currentLang());
-
-  // -- Internal State --
-  searchQuery = signal('');
-  activeMenuId = signal<string | null>(null);
-
-  filteredSessions = computed(() => {
-    const query = this.searchQuery().toLowerCase().trim();
-    const all = this.sessions();
-    if (!query) return all;
-    return all.filter(s => s.title.toLowerCase().includes(query));
-  });
-
-  @HostListener('document:click')
-  onDocumentClick() {
-    this.activeMenuId.set(null);
-  }
+  t = this.translationService.t;
+  currentLang = this.translationService.currentLang;
 
   onSearchInput(event: Event) {
     const value = (event.target as HTMLInputElement).value;
-    this.searchQuery.set(value);
+    this.searchQueryChange.emit(value);
   }
 
   onNewChat() {
-    this.searchQuery.set('');
     this.createNewChat.emit();
   }
 
   onLoadSession(id: string) {
-    this.searchQuery.set('');
     this.loadSession.emit(id);
   }
 
   onToggleMenu(event: MouseEvent, id: string) {
     event.stopPropagation();
-    this.activeMenuId.set(this.activeMenuId() === id ? null : id);
+    this.toggleMenu.emit({event, id});
   }
 
   onExportSession(event: MouseEvent, session: ChatSession) {

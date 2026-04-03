@@ -1,8 +1,9 @@
-import { Component, inject, input, WritableSignal, computed, signal, effect } from '@angular/core';
+import { Component, inject, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { UiService } from '../services/ui.service';
 import { AuthService } from '../services/auth.service';
 import { TranslationService } from '../services/translation.service';
+import { ThemeService } from '../services/theme.service';
 
 @Component({
   selector: 'app-settings-modal',
@@ -16,10 +17,10 @@ import { TranslationService } from '../services/translation.service';
        <!-- Modal Content -->
        <div [dir]="currentLang() === 'ar' ? 'rtl' : 'ltr'"
             class="w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl p-5 sm:p-8 relative z-10 animate-[slideUp_0.3s_cubic-bezier(0.16,1,0.3,1)] overflow-y-auto max-h-[90vh] sm:max-h-[85vh]"
-            [class.bg-white]="themeSignal()() === 'light'"
-            [class.bg-slate-900]="themeSignal()() === 'dark'"
-            [class.border]="themeSignal()() === 'dark'"
-            [class.border-slate-800]="themeSignal()() === 'dark'">
+            [class.bg-white]="!themeService.isDark()"
+            [class.bg-slate-900]="themeService.isDark()"
+            [class.border]="themeService.isDark()"
+            [class.border-slate-800]="themeService.isDark()">
          
          <button (click)="uiService.closeSettingsModal()" class="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors opacity-50 hover:opacity-100">
            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -74,12 +75,12 @@ import { TranslationService } from '../services/translation.service';
                     <span class="text-sm">{{ t().darkMode }}</span>
                 </div>
                 <div class="w-10 h-5 rounded-full relative transition-colors duration-300"
-                     [class.bg-gray-300]="themeSignal()() === 'light'"
-                     [class.bg-blue-500]="themeSignal()() === 'dark'">
+                     [class.bg-gray-300]="!themeService.isDark()"
+                     [class.bg-blue-500]="themeService.isDark()">
                    <div class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-sm"
-                        [class.left-0.5]="themeSignal()() === 'light'"
-                        [class.translate-x-5]="themeSignal()() === 'dark'"
-                        [class.left-0.5]="themeSignal()() === 'dark'"></div>
+                        [class.left-0.5]="!themeService.isDark()"
+                        [class.translate-x-5]="themeService.isDark()"
+                        [class.left-0.5]="themeService.isDark()"></div>
                 </div>
             </button>
 
@@ -126,12 +127,10 @@ export class SettingsModalComponent {
   uiService = inject(UiService);
   authService = inject(AuthService);
   translationService = inject(TranslationService);
+  themeService = inject(ThemeService);
   
-  themeSignal = input<WritableSignal<'light' | 'dark'>>(signal('light') as any);
-  modelSignal = input<WritableSignal<'fast' | 'core' | 'pro'>>(signal('fast') as any);
-
-  t = computed(() => this.translationService.t());
-  currentLang = computed(() => this.translationService.currentLang());
+  t = this.translationService.t;
+  currentLang = this.translationService.currentLang;
 
   usagePercentage = computed(() => {
     const usage = this.authService.dailyUsage();
@@ -145,10 +144,6 @@ export class SettingsModalComponent {
   }
 
   toggleTheme() {
-    this.themeSignal().update(t => {
-      const newT = t === 'light' ? 'dark' : 'light';
-      localStorage.setItem('aman_theme', newT);
-      return newT;
-    });
+    this.themeService.toggleTheme();
   }
 }

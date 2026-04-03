@@ -7,10 +7,10 @@
       <div class="flex items-center gap-3 overflow-x-auto no-scrollbar pb-3 px-1 animate-slide-up">
         @for (file of selectedFiles(); track $index) {
           <div class="flex-none w-28 h-28 relative group rounded-2xl overflow-hidden border shadow-sm transition-all hover:shadow-md"
-               [class.bg-white]="theme() === 'light'"
-               [class.border-slate-200]="theme() === 'light'"
-               [class.bg-slate-800]="theme() === 'dark'"
-               [class.border-slate-700]="theme() === 'dark'"
+               [class.bg-white]="!theme()"
+               [class.border-slate-200]="!theme()"
+               [class.bg-slate-800]="theme()"
+               [class.border-slate-700]="theme()"
           >
             @if (file.previewUrl) {
               <img [src]="file.previewUrl" alt="Preview" class="w-full h-full object-cover" referrerpolicy="no-referrer">
@@ -58,7 +58,7 @@
           <p class="text-sm font-bold text-red-800 dark:text-red-200 mb-0.5 whitespace-normal">{{ t().limitReachedTitle || 'تجاوزت الحد اليومي' }}</p>
           <p class="text-xs text-red-600 dark:text-red-300 leading-relaxed whitespace-normal">{{ t().limitReachedDesc || 'يرجى الانتظار 24 ساعة أو الاشتراك في النسخة الذهبية للمتابعة.' }}</p>
         </div>
-        <button (click)="uiService.openSettingsModal(true)" class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-[10px] sm:text-xs font-bold rounded-xl transition-colors shadow-md shadow-red-600/20 flex-shrink-0">
+        <button (click)="uiService.openSettingsModal()" class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-[10px] sm:text-xs font-bold rounded-xl transition-colors shadow-md shadow-red-600/20 flex-shrink-0">
           {{ t().upgrade || 'اشترك الآن' }}
         </button>
       </div>
@@ -85,14 +85,14 @@
             <!-- Web Search Toggle -->
             <button (click)="toggleWebSearch.emit()"
                     class="p-1.5 rounded-lg transition-colors flex items-center justify-center"
-                    [class.text-emerald-600]="useWebSearch() && theme() === 'light'"
-                    [class.bg-emerald-50]="useWebSearch() && theme() === 'light'"
-                    [class.text-emerald-400]="useWebSearch() && theme() === 'dark'"
-                    [class.bg-emerald-500/10]="useWebSearch() && theme() === 'dark'"
-                    [class.text-slate-500]="!useWebSearch() && theme() === 'light'"
-                    [class.hover:bg-slate-100]="!useWebSearch() && theme() === 'light'"
-                    [class.text-slate-400]="!useWebSearch() && theme() === 'dark'"
-                    [class.hover:bg-slate-900]="!useWebSearch() && theme() === 'dark'"
+                    [class.text-emerald-600]="useWebSearch() && !theme()"
+                    [class.bg-emerald-50]="useWebSearch() && !theme()"
+                    [class.text-emerald-400]="useWebSearch() && theme()"
+                    [class.bg-emerald-500/10]="useWebSearch() && theme()"
+                    [class.text-slate-500]="!useWebSearch() && !theme()"
+                    [class.hover:bg-slate-100]="!useWebSearch() && !theme()"
+                    [class.text-slate-400]="!useWebSearch() && theme()"
+                    [class.hover:bg-slate-900]="!useWebSearch() && theme()"
                     [title]="t().webSearch">
               <mat-icon class="text-[18px] w-[18px] h-[18px] flex items-center justify-center">language</mat-icon>
             </button>
@@ -100,14 +100,14 @@
             <!-- Image Gen Toggle -->
             <button (click)="toggleGenerateImage.emit()"
                     class="p-1.5 rounded-lg transition-colors flex items-center justify-center"
-                    [class.text-purple-600]="generateImage() && theme() === 'light'"
-                    [class.bg-purple-50]="generateImage() && theme() === 'light'"
-                    [class.text-purple-400]="generateImage() && theme() === 'dark'"
-                    [class.bg-purple-500/10]="generateImage() && theme() === 'dark'"
-                    [class.text-slate-500]="!generateImage() && theme() === 'light'"
-                    [class.hover:bg-slate-100]="!generateImage() && theme() === 'light'"
-                    [class.text-slate-400]="!generateImage() && theme() === 'dark'"
-                    [class.hover:bg-slate-900]="!generateImage() && theme() === 'dark'"
+                    [class.text-purple-600]="generateImage() && !theme()"
+                    [class.bg-purple-50]="generateImage() && !theme()"
+                    [class.text-purple-400]="generateImage() && theme()"
+                    [class.bg-purple-500/10]="generateImage() && theme()"
+                    [class.text-slate-500]="!generateImage() && !theme()"
+                    [class.hover:bg-slate-100]="!generateImage() && !theme()"
+                    [class.text-slate-400]="!generateImage() && theme()"
+                    [class.hover:bg-slate-900]="!generateImage() && theme()"
                     [title]="t().generateImage">
               <mat-icon class="text-[18px] w-[18px] h-[18px] flex items-center justify-center">palette</mat-icon>
             </button>
@@ -178,8 +178,8 @@
                     [class.bg-red-500]="isListening()"
                     [class.text-white]="isListening()"
                     [class.text-slate-500]="!isListening()"
-                    [class.hover:bg-slate-100]="!isListening() && theme() === 'light'"
-                    [class.dark:hover:bg-slate-900]="!isListening() && theme() === 'dark'"
+                    [class.hover:bg-slate-100]="!isListening() && !theme()"
+                    [class.dark:hover:bg-slate-900]="!isListening() && theme()"
                     [class.animate-pulse]="isListening()">
               <mat-icon class="text-[20px] w-[20px] h-[20px] flex items-center justify-center">{{ isListening() ? 'mic' : 'mic_none' }}</mat-icon>
             </button>
@@ -194,14 +194,14 @@
               <button (click)="onSendMessage()" 
                       [disabled]="(!inputValue().trim() && selectedFiles().length === 0) || isLimitExceeded()"
                       class="p-2 rounded-lg flex items-center justify-center transition-all active:scale-95"
-                      [class.bg-black]="(inputValue().trim() || selectedFiles().length > 0) && theme() === 'light'"
-                      [class.text-white]="(inputValue().trim() || selectedFiles().length > 0) && theme() === 'light'"
-                      [class.bg-white]="(inputValue().trim() || selectedFiles().length > 0) && theme() === 'dark'"
-                      [class.text-black]="(inputValue().trim() || selectedFiles().length > 0) && theme() === 'dark'"
-                      [class.bg-slate-100]="!inputValue().trim() && selectedFiles().length === 0 && theme() === 'light'"
-                      [class.text-slate-400]="!inputValue().trim() && selectedFiles().length === 0 && theme() === 'light'"
-                      [class.bg-slate-800]="!inputValue().trim() && selectedFiles().length === 0 && theme() === 'dark'"
-                      [class.text-slate-500]="!inputValue().trim() && selectedFiles().length === 0 && theme() === 'dark'">
+                      [class.bg-black]="(inputValue().trim() || selectedFiles().length > 0) && !theme()"
+                      [class.text-white]="(inputValue().trim() || selectedFiles().length > 0) && !theme()"
+                      [class.bg-white]="(inputValue().trim() || selectedFiles().length > 0) && theme()"
+                      [class.text-black]="(inputValue().trim() || selectedFiles().length > 0) && theme()"
+                      [class.bg-slate-100]="!inputValue().trim() && selectedFiles().length === 0 && !theme()"
+                      [class.text-slate-400]="!inputValue().trim() && selectedFiles().length === 0 && !theme()"
+                      [class.bg-slate-800]="!inputValue().trim() && selectedFiles().length === 0 && theme()"
+                      [class.text-slate-500]="!inputValue().trim() && selectedFiles().length === 0 && theme()">
                 <mat-icon class="text-[20px] w-[20px] h-[20px] flex items-center justify-center" [class.rtl:-scale-x-100]="currentLang() === 'ar'">arrow_upward</mat-icon>
               </button>
             }
